@@ -18,8 +18,8 @@ jobs:
           node-version: '20'
 
       - name: Install and Build
-        # frontend 폴더 안으로 들어가서 빌드 실행
-        working-directory: ./frontend
+        # 핵심: package.json이 있는 frontend 폴더로 들어가서 실행합니다.
+        working-directory: ./frontend 
         run: |
           npm install
           npm run build
@@ -31,8 +31,7 @@ jobs:
           username: ${{ secrets.GCP_USERNAME }}
           key: ${{ secrets.GCP_SSH_KEY }}
           port: 22
-          # 빌드 결과물 위치 (frontend 폴더 안의 dist)
+          # 빌드 결과물 위치 재확인
           source: "frontend/dist/*"
           target: "/var/www/html"
-          # frontend/dist 두 단계를 깎고 파일만 넣음
           strip_components: 2
