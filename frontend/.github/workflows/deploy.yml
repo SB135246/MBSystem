@@ -1,0 +1,38 @@
+name: Deploy React to GCP
+
+on:
+  push:
+    branches:
+      - feature/frontend
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install and Build
+        # frontend 폴더 안으로 들어가서 빌드 실행
+        working-directory: ./frontend
+        run: |
+          npm install
+          npm run build
+
+      - name: Deploy to GCE
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.GCP_HOST }}
+          username: ${{ secrets.GCP_USERNAME }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+          port: 22
+          # 빌드 결과물 위치 (frontend 폴더 안의 dist)
+          source: "frontend/dist/*"
+          target: "/var/www/html"
+          # frontend/dist 두 단계를 깎고 파일만 넣음
+          strip_components: 2
