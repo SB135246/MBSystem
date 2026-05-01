@@ -8,18 +8,22 @@ on:
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout source code
         uses: actions/checkout@v4
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
+
       - name: Install and Build
-        working-directory: ./frontend 
+        # 이제 루트에 package.json이 있으므로 working-directory를 지우거나 아래처럼 바꿉니다.
         run: |
           npm install
           npm run build
+
       - name: Deploy to GCE
         uses: appleboy/scp-action@master
         with:
@@ -27,6 +31,8 @@ jobs:
           username: ${{ secrets.GCP_USERNAME }}
           key: ${{ secrets.GCP_SSH_KEY }}
           port: 22
-          source: "frontend/dist/*"
+          # 빌드 결과물(dist)이 루트 폴더 바로 아래에 생깁니다.
+          source: "dist/*"
           target: "/var/www/html"
-          strip_components: 2
+          # dist 폴더 안의 파일만 보내야 하므로 1로 변경합니다.
+          strip_components: 1
