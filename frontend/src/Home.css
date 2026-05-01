@@ -1,0 +1,188 @@
+.container {
+  width: 100%;
+  max-width: 360px;
+  background: #e5e7eb;
+  border-radius: 20px;
+  overflow: hidden;
+}
+
+/* 헤더 */
+.header {
+  background: linear-gradient(90deg, #3b82f6, #2563eb);
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+}
+
+.header h1 {
+  font-size: 20px;
+  font-weight: bold;
+}
+
+.bell {
+  color: #ff6b6b;
+}
+
+/* 컨텐츠 */
+.content {
+  padding: 16px;
+}
+
+/* 상태 */
+.status {
+  background: #d1d5db;
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.dot {
+  width: 12px;
+  height: 12px;
+  background: #22c55e;
+  border-radius: 50%;
+}
+
+/* 업데이트 */
+.update {
+  text-align: center;
+  font-size: 13px;
+  color: #6b7280;
+  margin: 12px 0;
+}
+
+/* 카드 */
+.card {
+  background: #f3f4f6;
+  border-radius: 16px;
+  padding: 18px;
+  margin-bottom: 14px;
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.05);
+}
+
+.center {
+  text-align: center;
+}
+
+.label {
+  font-size: 14px;
+  color: #6b7280;
+}
+
+.floor {
+  font-size: 28px;
+  font-weight: bold;
+  margin-top: 8px;
+}
+
+/* RSSI */
+.rssi-row {
+  display: flex;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.ap-name {
+  width: 30px;
+  font-size: 13px;
+  color: #4b5563;
+}
+
+.bar-bg {
+  flex: 1;
+  height: 8px;
+  background: #d1d5db;
+  margin: 0 10px;
+  border-radius: 6px;
+}
+
+.bar {
+  height: 8px;
+  border-radius: 6px;
+}
+
+.bar.green {
+  background: #22c55e;
+}
+
+.bar.yellow {
+  background: #eab308;
+}
+
+.dbm {
+  font-size: 13px;
+  color: #6b7280;
+  width: 60px;
+}
+
+/* 층 */
+.floor-map {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.floor-text {
+  color: #9ca3af;
+}
+
+.line {
+  width: 2px;
+  height: 28px;
+  background: #cbd5e1;
+}
+
+.current-floor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.circle {
+  width: 14px;
+  height: 14px;
+  border: 3px solid #3b82f6;
+  border-radius: 50%;
+}
+
+.badge {
+  background: #3b82f6;
+  color: white;
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 12px;
+}
+
+/* 중앙 정렬 + 반응형 */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: #e5e7eb;
+}
+
+#root {
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+/* 모바일 대응 */
+@media (max-width: 480px) {
+  #root {
+    align-items: flex-start;
+  }
+
+  .container {
+    max-width: 100%;
+    border-radius: 0;
+  }
+}
