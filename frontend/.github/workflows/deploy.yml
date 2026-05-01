@@ -19,9 +19,9 @@ jobs:
           node-version: '20'
 
       - name: Install and Build
-        # 명시적으로 frontend 폴더로 이동하여 빌드 진행
+        working-directory: frontend   # 🔥 이거 추가
         run: |
-          cd frontend
+          
           npm install
           npm run build
 
