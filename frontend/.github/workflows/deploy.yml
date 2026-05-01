@@ -21,7 +21,6 @@ jobs:
       - name: Install and Build
         working-directory: frontend   # 🔥 이거 추가
         run: |
-          
           npm install
           npm run build
 
@@ -32,8 +31,6 @@ jobs:
           username: ${{ secrets.GCP_USERNAME }}
           key: ${{ secrets.GCP_SSH_KEY }}
           port: 22
-          # 빌드 결과물은 frontend/dist 안에 생성됨
-          source: "frontend/dist/*"
+          source: "frontend/dist/*"   # 🔥 수정
           target: "/var/www/html"
-          # frontend/dist 두 단계를 제외하고 파일만 전송
-          strip_components: 2
+          strip_components: 1
