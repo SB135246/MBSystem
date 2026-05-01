@@ -37,3 +37,4 @@ jobs:
           target: "/var/www/html"
           # frontend/dist 두 단계를 제외하고 파일만 전송
           strip_components: 2
+          use_insecure_cipher: true
