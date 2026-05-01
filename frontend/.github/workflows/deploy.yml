@@ -3,8 +3,7 @@ name: Deploy React to GCP
 on:
   push:
     branches:
-      - feature/frontend
-
+      - "**"
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
