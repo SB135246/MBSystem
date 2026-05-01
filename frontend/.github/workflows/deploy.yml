@@ -21,6 +21,7 @@ jobs:
       - name: Install and Build
         working-directory: frontend   # 🔥 이거 추가
         run: |
+          cd frontend
           npm install
           npm run build
 
