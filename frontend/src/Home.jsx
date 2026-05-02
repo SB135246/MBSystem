@@ -14,6 +14,9 @@ const Home = () => {
   // 🔥 시스템 시작 상태 추가
   const [isStarted, setIsStarted] = useState(false);
 
+  // 🔥 안전 / 경보 상태
+  const [status, setStatus] = useState("safe"); // safe | alert
+
   // 1. 오디오 객체를 useRef로 관리 (렌더링 시마다 새로 생성 방지)
   const audioRef = useRef(null);
 
@@ -48,6 +51,7 @@ const Home = () => {
 
     const timer = setInterval(() => {
       setAlertOpen(true);
+      setStatus("alert"); // 🔥 위험 상태로 변경
       setAlertCount((prev) => prev + 1);
     }, 5000);
 
@@ -65,6 +69,12 @@ const Home = () => {
       audioRef.current.currentTime = 0;
     }
   }, [alertOpen, isStarted]);
+
+  // 🔥 알림 확인 클릭 핸들러
+  const handleAlertConfirm = () => {
+    setAlertOpen(false);
+    setStatus("safe"); // 🔥 다시 안전 상태로 변경
+  };
 
   // 🔥 시작 전 화면 (Splash Screen)
   if (!isStarted) {
@@ -114,12 +124,18 @@ const Home = () => {
 
         {/* Main */}
         <main className="flex-1 p-3 sm:p-4 space-y-4">
-          {/* 안전 상태 */}
-          <section className="bg-white rounded-xl border border-[#E9ECEF] shadow-sm overflow-hidden">
-            <div className="bg-[#F1F3F5] py-3 flex justify-center items-center gap-2">
-              <div className="w-3 h-3 bg-[#00B341] rounded-full"></div>
-              <span className="text-[clamp(1rem,4vw,1.3rem)] font-bold text-[#00B341]">
-                안전
+          {/* 🔥 가변 안전/위험 상태 섹션 */}
+          <section className="bg-white rounded-xl border border-[#E9ECEF] shadow-sm overflow-hidden transition-colors duration-300">
+            <div
+              className={`py-3 flex justify-center items-center gap-2 ${status === "alert" ? "bg-red-50" : "bg-[#F1F3F5]"}`}
+            >
+              <div
+                className={`w-3 h-3 rounded-full ${status === "alert" ? "bg-red-500 animate-ping" : "bg-[#00B341]"}`}
+              ></div>
+              <span
+                className={`text-[clamp(1rem,4vw,1.3rem)] font-bold ${status === "alert" ? "text-red-600" : "text-[#00B341]"}`}
+              >
+                {status === "alert" ? "위험" : "안전"}
               </span>
             </div>
           </section>
@@ -127,7 +143,7 @@ const Home = () => {
           {/* 업데이트 시간 */}
           <div className="py-1 flex justify-center items-center text-[clamp(0.75rem,3vw,0.9rem)] text-[#868E96]">
             <Clock size={16} className="mr-1" />
-            마지막 업데이트 : 10초전
+            마지막 업데이트 : 방금전
           </div>
 
           {/* 현재 위치 */}
@@ -228,8 +244,8 @@ const Home = () => {
             <p className="text-red-500 font-bold text-lg mb-2">SOS 신호</p>
 
             <button
-              onClick={() => setAlertOpen(false)}
-              className="mt-4 w-full bg-red-500 text-white py-2 rounded-xl font-semibold"
+              onClick={handleAlertConfirm}
+              className="w-full bg-red-500 hover:bg-red-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-red-200 active:scale-95 transition-all"
             >
               알림 확인
             </button>
