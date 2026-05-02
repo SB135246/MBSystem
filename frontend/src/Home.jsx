@@ -58,15 +58,27 @@ const Home = () => {
     return () => clearInterval(timer);
   }, [isStarted]);
 
-  // 4. 모달 상태에 따른 재생/정지
+  // 4. 모달 상태에 따른 재생/정지 + 진동 추가
   useEffect(() => {
     if (!audioRef.current || !isStarted) return;
 
     if (alertOpen) {
+      // 오디오 재생
       audioRef.current.play().catch((err) => console.error("Play failed", err));
+
+      // 🔥 진동 추가 (패턴: 500ms 진동, 200ms 대기 반복)
+      if ("vibrate" in navigator) {
+        navigator.vibrate([500, 200, 500, 200, 500]);
+      }
     } else {
+      // 오디오 정지
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
+
+      // 🔥 진동 정지
+      if ("vibrate" in navigator) {
+        navigator.vibrate(0);
+      }
     }
   }, [alertOpen, isStarted]);
 
