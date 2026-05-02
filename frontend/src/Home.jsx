@@ -124,16 +124,32 @@ const Home = () => {
 
         {/* Main */}
         <main className="flex-1 p-3 sm:p-4 space-y-4">
-          {/* 🔥 가변 안전/위험 상태 섹션 */}
-          <section className="bg-white rounded-xl border border-[#E9ECEF] shadow-sm overflow-hidden transition-colors duration-300">
-            <div
-              className={`py-3 flex justify-center items-center gap-2 ${status === "alert" ? "bg-red-50" : "bg-[#F1F3F5]"}`}
-            >
-              <div
-                className={`w-3 h-3 rounded-full ${status === "alert" ? "bg-red-500 animate-ping" : "bg-[#00B341]"}`}
-              ></div>
+          {/* 가변 안전/위험 상태 섹션 */}
+          <section
+            className={`rounded-xl border shadow-sm overflow-hidden transition-all duration-500 ${
+              status === "alert"
+                ? "bg-red-50 border-red-200"
+                : "bg-green-50 border-green-100" // 🔥 회색에서 연한 초록색으로 변경
+            }`}
+          >
+            <div className="py-4 flex justify-center items-center gap-3">
+              {/* 상태 점(Dot) */}
+              <div className="relative flex h-3 w-3">
+                {status === "alert" && (
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                )}
+                <span
+                  className={`relative inline-flex rounded-full h-3 w-3 ${
+                    status === "alert" ? "bg-red-500" : "bg-[#00B341]"
+                  }`}
+                ></span>
+              </div>
+
+              {/* 텍스트 */}
               <span
-                className={`text-[clamp(1rem,4vw,1.3rem)] font-bold ${status === "alert" ? "text-red-600" : "text-[#00B341]"}`}
+                className={`text-[clamp(1.1rem,4.5vw,1.4rem)] font-extrabold tracking-tight ${
+                  status === "alert" ? "text-red-600" : "text-[#00B341]"
+                }`}
               >
                 {status === "alert" ? "위험" : "안전"}
               </span>
@@ -152,7 +168,7 @@ const Home = () => {
 
             <div className="flex justify-center py-3">
               <span className="font-extrabold text-[#1A3A6B] text-[clamp(2rem,8vw,3rem)]">
-                3층
+                1층
               </span>
             </div>
           </section>
@@ -165,13 +181,13 @@ const Home = () => {
               </h2>
 
               <div className="bg-[#0062FF] text-white text-[clamp(0.6rem,2.5vw,0.75rem)] px-3 py-1 rounded-full">
-                현재 층 : 3층
+                현재 층 : 1층
               </div>
             </div>
 
             <div className="relative w-full aspect-[2/1] flex items-center justify-center">
               <img
-                src={threeFloor}
+                src={oneFloor}
                 alt="IT관 구조도"
                 className="w-full h-full object-contain"
               />
