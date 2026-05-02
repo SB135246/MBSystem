@@ -58,28 +58,42 @@ const Home = () => {
     return () => clearInterval(timer);
   }, [isStarted]);
 
-  // 4. 모달 상태에 따른 재생/정지 + 진동 추가
+  // 4. 모달 상태에 따른 재생/정지 + 무한 진동 추가
   useEffect(() => {
     if (!audioRef.current || !isStarted) return;
 
+    let vibrationInterval;
+
     if (alertOpen) {
-      // 오디오 재생
+      // [청각] 오디오 재생
       audioRef.current.play().catch((err) => console.error("Play failed", err));
 
-      // 🔥 진동 추가 (패턴: 500ms 진동, 200ms 대기 반복)
+      // [촉각] 무한 진동 설정 (패턴: 500ms 진동, 500ms 대기)
       if ("vibrate" in navigator) {
-        navigator.vibrate([500, 200, 500, 200, 500]);
+        // 즉시 한 번 실행
+        navigator.vibrate(500);
+
+        // 1초(진동 0.5초 + 대기 0.5초)마다 반복 호출
+        vibrationInterval = setInterval(() => {
+          navigator.vibrate(500);
+        }, 1000);
       }
     } else {
-      // 오디오 정지
+      // [청각] 오디오 정지
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
 
-      // 🔥 진동 정지
+      // [촉각] 진동 정지 및 인터벌 제거
       if ("vibrate" in navigator) {
         navigator.vibrate(0);
       }
+      if (vibrationInterval) clearInterval(vibrationInterval);
     }
+
+    // 클린업 함수
+    return () => {
+      if (vibrationInterval) clearInterval(vibrationInterval);
+    };
   }, [alertOpen, isStarted]);
 
   // 🔥 알림 확인 클릭 핸들러
