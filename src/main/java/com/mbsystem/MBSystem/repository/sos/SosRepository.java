@@ -33,13 +33,13 @@ public class SosRepository {
         return sosRepository.findById(sosId);
     }
 
+    //전체 조회
   public List<Sos> findById(Long moduleId){
     return queryFactory.selectFrom(sos)
         .where(sos.module.id.eq(moduleId))
         .fetch();
   }
 
-  //전체 조회
   public void delete(Long moduleId){
     queryFactory.delete(sos)
         .where(sos.module.id.eq(moduleId))
