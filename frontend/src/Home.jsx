@@ -13,14 +13,12 @@ const Home = () => {
 
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertCount, setAlertCount] = useState(0);
+  const [status, setStatus] = useState("safe");
 
-  // 🔥 안전 / 경보 상태
-  const [status, setStatus] = useState("safe"); // safe | alert
-
-  // 1. 오디오 객체를 useRef로 관리 (렌더링 시마다 새로 생성 방지)
   const audioRef = useRef(null);
+  const vibrationTimeoutRef = useRef(null); // 🔥 핵심
 
-  // 1. 오디오 객체는 미리 생성
+  // 🔊 오디오 준비
   useEffect(() => {
     audioRef.current = new Audio("/alram.mp3");
     audioRef.current.loop = true;
@@ -30,6 +28,7 @@ const Home = () => {
     };
   }, []);
 
+  // 🔥 5초마다 알림 발생
   useEffect(() => {
     const timer = setInterval(() => {
       setAlertOpen(true);
@@ -40,48 +39,59 @@ const Home = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // 4. 모달 상태에 따른 재생/정지 + 무한 진동 추가
+  // 🔥 진동 루프 시작
+  const startVibrationLoop = () => {
+    if (!("vibrate" in navigator)) return;
+
+    const pattern = [500, 300, 500, 300, 500]; // 반복 패턴
+
+    const loop = () => {
+      navigator.vibrate(pattern);
+
+      // 패턴 길이에 맞춰 재실행
+      vibrationTimeoutRef.current = setTimeout(loop, 2000);
+    };
+
+    loop();
+  };
+
+  // 🔥 진동 멈춤
+  const stopVibrationLoop = () => {
+    if ("vibrate" in navigator) {
+      navigator.vibrate(0);
+    }
+
+    if (vibrationTimeoutRef.current) {
+      clearTimeout(vibrationTimeoutRef.current);
+    }
+  };
+
+  // 🔥 알림 상태 변화에 따라 처리
   useEffect(() => {
     if (!audioRef.current) return;
 
-    let vibrationInterval;
-
     if (alertOpen) {
-      // [청각] 오디오 재생
-      audioRef.current.play().catch((err) => console.error("Play failed", err));
+      // 🔊 소리
+      audioRef.current.play().catch(() => {});
 
-      // [촉각] 무한 진동 설정 (패턴: 500ms 진동, 500ms 대기)
-      if ("vibrate" in navigator) {
-        // 즉시 한 번 실행
-        navigator.vibrate(500);
-
-        // 1초(진동 0.5초 + 대기 0.5초)마다 반복 호출
-        vibrationInterval = setInterval(() => {
-          navigator.vibrate(500);
-        }, 1000);
-      }
+      // 🔥 진동 시작
+      startVibrationLoop();
     } else {
-      // [청각] 오디오 정지
+      // 🔊 소리 정지
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
 
-      // [촉각] 진동 정지 및 인터벌 제거
-      if ("vibrate" in navigator) {
-        navigator.vibrate(0);
-      }
-      if (vibrationInterval) clearInterval(vibrationInterval);
+      // 🔥 진동 정지
+      stopVibrationLoop();
     }
 
-    // 클린업 함수
-    return () => {
-      if (vibrationInterval) clearInterval(vibrationInterval);
-    };
+    return () => stopVibrationLoop();
   }, [alertOpen]);
 
-  // 🔥 알림 확인 클릭 핸들러
+  // 🔥 알림 닫기
   const handleAlertConfirm = () => {
     setAlertOpen(false);
-    setStatus("safe"); // 🔥 다시 안전 상태로 변경
+    setStatus("safe");
   };
 
   return (
