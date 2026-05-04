@@ -39,17 +39,15 @@ const Home = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // 🔥 진동 루프 시작
   const startVibrationLoop = () => {
     if (!("vibrate" in navigator)) return;
 
-    const pattern = [500, 300, 500, 300, 500]; // 반복 패턴
+    const pattern = [500, 300, 500, 300, 500]; // 총 2100ms
+    const totalDuration = pattern.reduce((a, b) => a + b, 0); // 2100
 
     const loop = () => {
       navigator.vibrate(pattern);
-
-      // 패턴 길이에 맞춰 재실행
-      vibrationTimeoutRef.current = setTimeout(loop, 2000);
+      vibrationTimeoutRef.current = setTimeout(loop, totalDuration + 200); // 2300ms 후 재실행
     };
 
     loop();

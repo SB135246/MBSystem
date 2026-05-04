@@ -28,7 +28,7 @@ const StartPage = () => {
   const startSystem = () => {
     // 🔥 진동 unlock (조금 길게)
     if ("vibrate" in navigator) {
-      navigator.vibrate(50); // 1ms → ❌ / 50ms → ✔
+      navigator.vibrate(100);
     }
 
     const audio = new Audio("/alram.mp3");
