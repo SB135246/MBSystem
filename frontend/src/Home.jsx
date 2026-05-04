@@ -64,22 +64,19 @@ const Home = () => {
     }
   };
 
-  // 🔥 알림 상태 변화에 따라 처리
   useEffect(() => {
     if (!audioRef.current) return;
 
     if (alertOpen) {
-      // 🔊 소리
       audioRef.current.play().catch(() => {});
 
-      // 🔥 진동 시작
-      startVibrationLoop();
+      // 짧은 딜레이 후 진동 시작 (브라우저 안정화)
+      setTimeout(() => {
+        startVibrationLoop();
+      }, 100);
     } else {
-      // 🔊 소리 정지
       audioRef.current.pause();
       audioRef.current.currentTime = 0;
-
-      // 🔥 진동 정지
       stopVibrationLoop();
     }
 

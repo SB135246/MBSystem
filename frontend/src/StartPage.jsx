@@ -26,19 +26,16 @@ const StartPage = () => {
   };
 
   const startSystem = () => {
-    // 🔥 진동 unlock (조금 길게)
     if ("vibrate" in navigator) {
-      navigator.vibrate(100);
+      navigator.vibrate([100, 50, 100]); // 단순 100ms보다 패턴이 더 잘 울림
     }
 
     const audio = new Audio("/alram.mp3");
+    audio.play().catch(() => {});
+    audio.pause();
+    audio.currentTime = 0;
 
-    audio.play().then(() => {
-      audio.pause();
-      audio.currentTime = 0;
-
-      navigate("/main");
-    });
+    navigate("/main"); // then() 밖으로 꺼내기
   };
 
   return (
