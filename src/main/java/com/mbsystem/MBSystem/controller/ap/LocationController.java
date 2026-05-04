@@ -22,22 +22,19 @@ public class LocationController {
 
   @PostMapping("/calculate")
   public ResponseEntity<double[]> getCoords(@RequestBody List<RssiScanRequest> requests) {
-    if (requests.isEmpty()) {
-      return ResponseEntity.badRequest().build();
-    }
-
-    requests.sort((a, b) -> Double.compare(b.getRssi(), a.getRssi()));
-
-    double[] coords = locationService.calculateUserLocation(requests);
-
-    Long placeId = requests.get(0).getPlaceId();
-    Long moduleNum = requests.get(0).getModuleNum();
-
-    // 4. 웹소켓 전송: 경로에 placeId와 moduleNum을 포함
-    // 구독 주소 예시: /topic/location/1/101
-    String destination = "/topic/location/" + placeId + "/" + moduleNum;
-    messagingTemplate.convertAndSend(destination, coords);
-
-    return ResponseEntity.ok(coords);
+      // 1. 데이터가 비어있으면 null이나 빈 배열을 반환
+      if (requests == null || requests.isEmpty()) {
+          return ResponseEntity.ok(new double[0]); // 혹은 null
+      }
+      // 2. 정렬 및 위치 계산
+      requests.sort((a, b) -> Double.compare(b.getRssi(), a.getRssi()));
+      double[] coords = locationService.calculateUserLocation(requests);
+      // 3. 웹소켓 전송 (대시보드 실시간 업데이트용)
+      Long placeId = requests.get(0).getPlaceId();
+      Long moduleNum = requests.get(0).getModuleNum();
+      String destination = "/topic/location/" + placeId + "/" + moduleNum;
+      messagingTemplate.convertAndSend(destination, coords);
+      // 4. HTTP 응답 (요청자에게 결과 전달)
+      return ResponseEntity.ok(coords);
   }
 }

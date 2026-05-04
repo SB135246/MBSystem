@@ -43,6 +43,13 @@ public class ManagerPlaceRepository {
         .fetch();
   }
 
+  public List<ManagerPlace> findByAllManagerId(Long managerId) {
+      return queryFactory
+              .selectFrom(managerPlace)
+              .where(managerPlace.manager.id.eq(managerId))
+              .fetch();
+  }
+
   public List<ManagerPlace> findByPlaceId(Long placeId) {
 
     return queryFactory
