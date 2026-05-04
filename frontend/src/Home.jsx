@@ -70,10 +70,9 @@ const Home = () => {
     if (alertOpen) {
       audioRef.current.play().catch(() => {});
 
-      // 짧은 딜레이 후 진동 시작 (브라우저 안정화)
-      setTimeout(() => {
-        startVibrationLoop();
-      }, 100);
+      navigator.vibrate([300, 100, 300]); // 🔥 추가
+
+      startVibrationLoop(); // 🔥 바로 실행
     } else {
       audioRef.current.pause();
       audioRef.current.currentTime = 0;

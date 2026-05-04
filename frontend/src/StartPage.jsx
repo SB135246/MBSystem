@@ -25,17 +25,28 @@ const StartPage = () => {
     }
   };
 
-  const startSystem = () => {
-    if ("vibrate" in navigator) {
-      navigator.vibrate([100, 50, 100]); // 단순 100ms보다 패턴이 더 잘 울림
+  const startSystem = async () => {
+    try {
+      // 🔥 진동 unlock
+      if ("vibrate" in navigator) {
+        navigator.vibrate([100, 50, 100]);
+      }
+
+      // 🔥 오디오 unlock (await 필수)
+      const audio = new Audio("/alram.mp3");
+
+      await audio.play(); // 👉 여기 중요
+      audio.pause();
+      audio.currentTime = 0;
+
+      // 🔥 약간의 딜레이 후 이동 (안정성)
+      setTimeout(() => {
+        navigate("/main");
+      }, 100);
+    } catch (e) {
+      console.log("unlock 실패", e);
+      navigate("/main");
     }
-
-    const audio = new Audio("/alram.mp3");
-    audio.play().catch(() => {});
-    audio.pause();
-    audio.currentTime = 0;
-
-    navigate("/main"); // then() 밖으로 꺼내기
   };
 
   return (
