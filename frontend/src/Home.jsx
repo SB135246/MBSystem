@@ -39,47 +39,53 @@ const Home = () => {
     return () => clearInterval(timer);
   }, []);
 
+  // 1. 루프 함수를 useCallback이나 함수 밖으로 빼서 관리
   const startVibrationLoop = () => {
     if (!("vibrate" in navigator)) return;
 
-    const pattern = [500, 300, 500, 300, 500]; // 총 2100ms
-    const totalDuration = pattern.reduce((a, b) => a + b, 0); // 2100
+    const pattern = [500, 300, 500, 300, 500]; // 약 2초
+    const totalDuration = pattern.reduce((a, b) => a + b, 0);
 
     const loop = () => {
+      // 진동 실행 전 이전 진동을 명시적으로 멈추지 말고 바로 덮어씌웁니다.
       navigator.vibrate(pattern);
-      vibrationTimeoutRef.current = setTimeout(loop, totalDuration + 200); // 2300ms 후 재실행
+      vibrationTimeoutRef.current = setTimeout(loop, totalDuration + 500);
     };
 
     loop();
   };
 
-  // 🔥 진동 멈춤
   const stopVibrationLoop = () => {
-    if ("vibrate" in navigator) {
-      navigator.vibrate(0);
-    }
-
     if (vibrationTimeoutRef.current) {
       clearTimeout(vibrationTimeoutRef.current);
+      vibrationTimeoutRef.current = null;
+    }
+    if ("vibrate" in navigator) {
+      navigator.vibrate(0); // 여기서 완전히 정지
     }
   };
 
+  // 2. useEffect 로직 수정
   useEffect(() => {
-    if (!audioRef.current) return;
-
     if (alertOpen) {
-      audioRef.current.play().catch(() => {});
+      // 사운드 재생
+      audioRef.current?.play().catch(() => {});
 
-      navigator.vibrate([300, 100, 300]); // 🔥 추가
+      // 즉시 짧은 진동으로 브라우저 깨우기
+      navigator.vibrate(200);
 
-      startVibrationLoop(); // 🔥 바로 실행
+      // 약간의 시차를 두고 루프 시작
+      const timer = setTimeout(() => {
+        startVibrationLoop();
+      }, 100);
+
+      return () => {
+        clearTimeout(timer);
+        stopVibrationLoop();
+      };
     } else {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
       stopVibrationLoop();
     }
-
-    return () => stopVibrationLoop();
   }, [alertOpen]);
 
   // 🔥 알림 닫기
