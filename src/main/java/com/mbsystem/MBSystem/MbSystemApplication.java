@@ -9,5 +9,5 @@ public class MbSystemApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(MbSystemApplication.class, args);
 	}
-
+    //1231231231
 }
