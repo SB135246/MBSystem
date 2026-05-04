@@ -27,19 +27,14 @@ const StartPage = () => {
 
   const startSystem = async () => {
     try {
-      // 🔥 진동 unlock
-      if ("vibrate" in navigator) {
-        navigator.vibrate([100, 50, 100]);
-      }
-
-      // 🔥 오디오 unlock (await 필수)
+      // 🔥 오디오 unlock (핵심)
       const audio = new Audio("/alram.mp3");
 
-      await audio.play(); // 👉 여기 중요
+      await audio.play(); // 👉 사용자 인터랙션에서 실행되어야 함
       audio.pause();
       audio.currentTime = 0;
 
-      // 🔥 약간의 딜레이 후 이동 (안정성)
+      // 🔥 약간의 딜레이 후 이동
       setTimeout(() => {
         navigate("/main");
       }, 100);
@@ -61,6 +56,7 @@ const StartPage = () => {
       <h1 className="text-white text-2xl font-bold mb-2">MBS 시스템</h1>
 
       <p className="text-white/80 mb-8 text-sm">
+        경보 알림 소리를 위해 <br />
         시스템 시작 버튼을 눌러주세요.
       </p>
 
