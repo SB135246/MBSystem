@@ -26,12 +26,16 @@ const StartPage = () => {
   };
 
   const startSystem = () => {
-    // 🔥 오디오 unlock용 (중요)
+    // 🔥 진동 unlock 추가
+    if ("vibrate" in navigator) {
+      navigator.vibrate(1); // 아주 짧게
+    }
+
     const audio = new Audio("/alram.mp3");
     audio.play().then(() => {
       audio.pause();
       audio.currentTime = 0;
-      navigate("/main"); // 👉 메인으로 이동
+      navigate("/main");
     });
   };
 
