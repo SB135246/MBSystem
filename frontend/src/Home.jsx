@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { Bell, Clock, Wifi, MapPin } from "lucide-react";
 
 import oneFloor from "./image/oneFloor.png";
@@ -17,6 +17,14 @@ const Home = () => {
 
   const audioRef = useRef(null);
   const vibrationTimeoutRef = useRef(null); // 🔥 핵심
+
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.state?.triggerAlert) {
+      setAlertOpen(true); // 👉 바로 실행
+    }
+  }, []);
 
   // 🔊 오디오 준비
   useEffect(() => {
@@ -65,16 +73,12 @@ const Home = () => {
     }
   };
 
-  // 2. useEffect 로직 수정
   useEffect(() => {
     if (alertOpen) {
-      // 사운드 재생
       audioRef.current?.play().catch(() => {});
 
-      // 즉시 짧은 진동으로 브라우저 깨우기
       navigator.vibrate(200);
 
-      // 약간의 시차를 두고 루프 시작
       const timer = setTimeout(() => {
         startVibrationLoop();
       }, 100);
@@ -84,16 +88,21 @@ const Home = () => {
         stopVibrationLoop();
       };
     } else {
+      // 🔥 이거 반드시 있어야 함
+      audioRef.current?.pause();
+      audioRef.current.currentTime = 0;
+
       stopVibrationLoop();
     }
   }, [alertOpen]);
 
-  // 🔥 알림 닫기
   const handleAlertConfirm = () => {
+    audioRef.current?.pause(); // 🔥 추가
+    audioRef.current.currentTime = 0;
+
     setAlertOpen(false);
     setStatus("safe");
   };
-
   return (
     <div className="flex flex-col min-h-[100dvh] bg-[#F8F9FA]">
       <div className="w-full max-w-md mx-auto flex flex-col flex-1">

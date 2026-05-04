@@ -45,7 +45,7 @@ const StartPage = () => {
       }, 100);
     } catch (e) {
       console.log("unlock 실패", e);
-      navigate("/main");
+      navigate("/main", { state: { triggerAlert: true } });
     }
   };
 
