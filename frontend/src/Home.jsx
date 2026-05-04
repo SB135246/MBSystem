@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
-import { Bell, Clock, Wifi, MapPin, Play } from "lucide-react";
+import { useNavigate } from "react-router-dom";
+import { Bell, Clock, Wifi, MapPin } from "lucide-react";
 
 import oneFloor from "./image/oneFloor.png";
 import twoFloor from "./image/twoFloor.png";
@@ -8,11 +9,10 @@ import threeFloor from "./image/threeFloor.png";
 import "./tailwind.css";
 
 const Home = () => {
+  const navigate = useNavigate();
+
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertCount, setAlertCount] = useState(0);
-
-  // 🔥 시스템 시작 상태 추가
-  const [isStarted, setIsStarted] = useState(false);
 
   // 🔥 안전 / 경보 상태
   const [status, setStatus] = useState("safe"); // safe | alert
@@ -30,37 +30,19 @@ const Home = () => {
     };
   }, []);
 
-  // 2. [핵심] 시스템 시작 시 오디오 락 해제 및 타이머 시작
-  const startSystem = () => {
-    if (audioRef.current) {
-      // 사용자가 버튼을 누르는 이 순간 오디오 통로가 뚫립니다.
-      audioRef.current
-        .play()
-        .then(() => {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-          setIsStarted(true); // 이제부터는 5초마다 소리가 납니다.
-        })
-        .catch((err) => console.error("Audio unlock failed", err));
-    }
-  };
-
-  // 3. 시스템이 시작된 후에만 타이머 작동
   useEffect(() => {
-    if (!isStarted) return;
-
     const timer = setInterval(() => {
       setAlertOpen(true);
-      setStatus("alert"); // 🔥 위험 상태로 변경
+      setStatus("alert");
       setAlertCount((prev) => prev + 1);
     }, 5000);
 
     return () => clearInterval(timer);
-  }, [isStarted]);
+  }, []);
 
   // 4. 모달 상태에 따른 재생/정지 + 무한 진동 추가
   useEffect(() => {
-    if (!audioRef.current || !isStarted) return;
+    if (!audioRef.current) return;
 
     let vibrationInterval;
 
@@ -94,37 +76,13 @@ const Home = () => {
     return () => {
       if (vibrationInterval) clearInterval(vibrationInterval);
     };
-  }, [alertOpen, isStarted]);
+  }, [alertOpen]);
 
   // 🔥 알림 확인 클릭 핸들러
   const handleAlertConfirm = () => {
     setAlertOpen(false);
     setStatus("safe"); // 🔥 다시 안전 상태로 변경
   };
-
-  // 🔥 시작 전 화면 (Splash Screen)
-  if (!isStarted) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-screen bg-[#0052CC] p-6 text-center">
-        <div className="w-20 h-20 bg-white/20 rounded-full flex items-center justify-center mb-6 animate-pulse">
-          <Bell size={40} className="text-white" />
-        </div>
-        <h1 className="text-white text-2xl font-bold mb-2">MBS 시스템</h1>
-        <p className="text-white/80 mb-8 text-sm leading-relaxed">
-          경보 알림 소리를 위해
-          <br />
-          시스템 시작 버튼을 눌러주세요.
-        </p>
-        <button
-          onClick={startSystem}
-          className="flex items-center gap-2 bg-white text-[#0052CC] px-8 py-4 rounded-2xl font-bold shadow-xl active:scale-95 transition-transform"
-        >
-          <Play size={20} fill="#0052CC" />
-          시스템 시작하기
-        </button>
-      </div>
-    );
-  }
 
   return (
     <div className="flex flex-col min-h-[100dvh] bg-[#F8F9FA]">
@@ -135,7 +93,10 @@ const Home = () => {
 
           {/* 🔥 위치 수정된 알림 버튼 */}
           <div className="absolute right-4 top-1/2 -translate-y-1/2">
-            <div className="relative bg-[#FF4D4D] rounded-full p-2 flex items-center justify-center cursor-pointer active:scale-95">
+            <div
+              onClick={() => navigate("/alerts")}
+              className="relative bg-[#FF4D4D] rounded-full p-2 flex items-center justify-center cursor-pointer active:scale-95"
+            >
               <Bell size={18} fill="white" stroke="white" />
 
               {/* 알림 숫자 */}
@@ -289,7 +250,7 @@ const Home = () => {
               onClick={handleAlertConfirm}
               className="w-full bg-red-500 hover:bg-red-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-red-200 active:scale-95 transition-all"
             >
-              알림 확인
+              알림 닫기
             </button>
           </div>
         </div>
