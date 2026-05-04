@@ -5,6 +5,7 @@ import com.querydsl.jpa.impl.JPAQueryFactory;
 import jakarta.persistence.EntityManager;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Repository;
+import java.util.Optional;
 
 import java.util.List;
 
@@ -27,12 +28,18 @@ public class SosRepository {
     return sosRepository.save(sos);
   }
 
+    // sosId로 단건 조회
+    public Optional<Sos> findBySosId(Long sosId) {
+        return sosRepository.findById(sosId);
+    }
+
   public List<Sos> findById(Long moduleId){
     return queryFactory.selectFrom(sos)
         .where(sos.module.id.eq(moduleId))
         .fetch();
   }
 
+  //전체 조회
   public void delete(Long moduleId){
     queryFactory.delete(sos)
         .where(sos.module.id.eq(moduleId))

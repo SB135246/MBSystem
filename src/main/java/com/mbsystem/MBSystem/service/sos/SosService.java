@@ -1,0 +1,119 @@
+package com.mbsystem.MBSystem.service.sos;
+
+import com.mbsystem.MBSystem.domain.Module;
+import com.mbsystem.MBSystem.domain.Sos;
+import com.mbsystem.MBSystem.dto.RssiScanRequest;
+import com.mbsystem.MBSystem.dto.SosAlertMessage;
+import com.mbsystem.MBSystem.dto.SosRequest;
+import com.mbsystem.MBSystem.repository.module.ModuleRepository;
+import com.mbsystem.MBSystem.repository.sos.SosRepository;
+import com.mbsystem.MBSystem.service.ap.LocationService;
+import lombok.RequiredArgsConstructor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.*;
+
+@Service
+@RequiredArgsConstructor
+public class SosService {
+
+    private final SosRepository sosRepository;
+    private final ModuleRepository moduleRepository;
+    private final LocationService locationService;
+    private final SimpMessagingTemplate messagingTemplate;
+
+    private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
+    private final Map<Long, ScheduledFuture<?>> activeAlerts = new ConcurrentHashMap<>();
+
+    private static final long REPEAT_INTERVAL_SECONDS = 30;
+
+    @Transactional
+    public Long triggerSos(SosRequest request) {
+        Module module = moduleRepository.findByModuleNumAndPlaceId(request.getModuleNum(), request.getPlaceId())
+                .orElseThrow(() -> new IllegalArgumentException("등록되지 않은 모듈: " + request.getModuleNum()));
+
+        double[] coords = calculatePosition(request);
+
+        Sos sos = new Sos();
+        sos.setModule(module);
+        sos.setSosAt(Instant.now());
+        sos.setPosX(coords.length >= 2 ? coords[0] : null);
+        sos.setPosY(coords.length >= 2 ? coords[1] : null);
+        sos.setIsConfirmed(false);
+        Sos saved = sosRepository.save(sos);
+
+        SosAlertMessage alert = new SosAlertMessage(
+                saved.getId(),
+                module.getModuleNum(),
+                module.getPlace().getId(),
+                saved.getPosX(),
+                saved.getPosY(),
+                saved.getSosAt()
+        );
+
+        sendAlert(alert);
+        scheduleRepeat(saved.getId(), alert);
+
+        return saved.getId();
+    }
+
+    @Transactional
+    public void confirmSos(Long sosId) {
+        Sos sos = sosRepository.findBySosId(sosId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 SOS: " + sosId));
+        sos.setIsConfirmed(true);
+        sos.setConfirmedAt(Instant.now());
+        sosRepository.save(sos);
+
+        cancelRepeat(sosId);
+    }
+
+    private double[] calculatePosition(SosRequest request) {
+        if (request.getWifi() == null || request.getWifi().size() < 3) {
+            return new double[0];
+        }
+        try {
+            List<RssiScanRequest> rssiList = request.getWifi().stream()
+                    .map(w -> {
+                        RssiScanRequest r = new RssiScanRequest();
+                        r.setSsid(w.getSsid());
+                        r.setRssi(w.getRssi());
+                        r.setModuleNum(request.getModuleNum());
+                        r.setPlaceId(request.getPlaceId());
+                        return r;
+                    })
+                    .sorted((a, b) -> Double.compare(b.getRssi(), a.getRssi()))
+                    .toList();
+            return locationService.calculateUserLocation(rssiList);
+        } catch (Exception e) {
+            return new double[0];
+        }
+    }
+
+    private void sendAlert(SosAlertMessage alert) {
+        String destination = "/topic/sos/" + alert.getPlaceId();
+        messagingTemplate.convertAndSend(destination, alert);
+    }
+
+    private void scheduleRepeat(Long sosId, SosAlertMessage alert) {
+        ScheduledFuture<?> future = scheduler.scheduleAtFixedRate(
+                () -> sendAlert(alert),
+                REPEAT_INTERVAL_SECONDS,
+                REPEAT_INTERVAL_SECONDS,
+                TimeUnit.SECONDS
+        );
+        activeAlerts.put(sosId, future);
+    }
+
+    private void cancelRepeat(Long sosId) {
+        ScheduledFuture<?> future = activeAlerts.remove(sosId);
+        if (future != null) {
+            future.cancel(false);
+        }
+    }
+}

@@ -26,4 +26,17 @@ public class Sos {
   @Column(name = "sos_at", nullable = false)
   private Instant sosAt;
 
+  @Column(name = "pos_x")
+  private Double posX;
+
+  @Column(name = "pos_y")
+  private Double posY;
+
+  @NotNull
+  @Column(name = "is_confirmed", nullable = false)
+  private Boolean isConfirmed = false;
+
+  @Column(name = "confirmed_at")
+  private Instant confirmedAt;
+
 }
