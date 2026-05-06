@@ -1,4 +1,4 @@
-import { ArrowLeft, Bell, MapPin } from "lucide-react";
+import { ArrowLeft, Bell, MapPin, ShieldAlert } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 const AlertPage = () => {
@@ -34,6 +34,16 @@ const AlertPage = () => {
             <span className="font-bold text-orange-500">위치 이탈</span>
           </div>
           <span className="text-sm text-gray-500">10초 전</span>
+        </div>
+
+        <div className="bg-purple-100 rounded-xl p-4 flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="bg-purple-500 text-white p-3 rounded-full">
+              <ShieldAlert />
+            </div>
+            <span className="font-bold text-purple-500">장치 탈거 감지</span>
+          </div>
+          <span className="text-sm text-gray-500">30초 전</span>
         </div>
       </div>
     </div>
