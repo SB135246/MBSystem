@@ -11,7 +11,7 @@ public class SosAlertMessage {
     private Long sosId;
     private Long moduleNum;
     private Long placeId;
-    private Double posX;
-    private Double posY;
+    private Double xCordinate;
+    private Double yCordinate;
     private Instant sosAt;
 }
