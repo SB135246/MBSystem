@@ -23,6 +23,7 @@ public class DataApiController {
 
     private final LocationService locationService;
     private final SosService sosService;
+    private final com.mbsystem.MBSystem.service.wearing.WearingService wearingService;
 
     @PostMapping("/data")
     public ResponseEntity<String> receiveSensorData(@RequestBody SensorDataRequest request) {
@@ -32,6 +33,9 @@ public class DataApiController {
         log.info("장소 ID: {}", request.getPlace_id());
         log.info("버튼 상태: {}, SOS: {}", request.getBtn(), request.getBtn_press_3s());
         log.info("센서 값 - 조도: {}, 터치: {}", request.getLight(), request.getTouch());
+
+        // 웨어링 상태 처리 및 전송
+        wearingService.processWearingData(request);
 
         // 2. 수신된 WiFi 개수 확인
         if (request.getWifi() != null) {
