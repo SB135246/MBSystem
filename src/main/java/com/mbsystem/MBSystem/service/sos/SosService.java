@@ -39,11 +39,15 @@ public class SosService {
 
         double[] coords = calculatePosition(request);
 
+        if (coords.length < 2) {
+            throw new IllegalStateException("위치 계산 실패: WiFi AP 정보가 부족합니다.");
+        }
+
         Sos sos = new Sos();
         sos.setModule(module);
         sos.setSosAt(Instant.now());
-        sos.setPosX(coords.length >= 2 ? coords[0] : null);
-        sos.setPosY(coords.length >= 2 ? coords[1] : null);
+        sos.setXCordinate(coords[0]);
+        sos.setYCordinate(coords[1]);
         sos.setIsConfirmed(false);
         Sos saved = sosRepository.save(sos);
 
@@ -51,8 +55,8 @@ public class SosService {
                 saved.getId(),
                 module.getModuleNum(),
                 module.getPlace().getId(),
-                saved.getPosX(),
-                saved.getPosY(),
+                saved.getXCordinate(),
+                saved.getYCordinate(),
                 saved.getSosAt()
         );
 
