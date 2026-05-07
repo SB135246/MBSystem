@@ -29,9 +29,12 @@ public class LeaveService {
     private final ApRepository apRepository;
     private final SimpMessagingTemplate messagingTemplate;
 
-    // 모듈별 마지막 이탈 알림 시각 (30초 쓰로틀)
-    private final Map<Long, Instant> lastAlertTime = new ConcurrentHashMap<>();
-    private static final long ALERT_THROTTLE_SECONDS = 30;
+    // 모듈별 마지막으로 구역 내 AP가 감지된 시각
+    private final Map<Long, Instant> lastSeenTime = new ConcurrentHashMap<>();
+    // 모듈별 현재 이탈 상태 (알림 중복 방지)
+    private final Map<Long, Boolean> isCurrentlyLeaved = new ConcurrentHashMap<>();
+    
+    private static final long LEAVE_THRESHOLD_MINUTES = 5;
 
     @Transactional
     public void checkDeparture(long moduleNum, long placeId, List<SensorDataRequest.WifiInfo> receivedWifi) {
@@ -44,34 +47,51 @@ public class LeaveService {
                 .map(Ap::getSsid)
                 .collect(Collectors.toSet());
 
-        // 수신된 WiFi 중 장소 AP와 일치하는 SSID가 하나라도 있으면 정상 구역
+        // 수신된 WiFi 중 장소 AP와 일치하는 SSID가 있는지 확인
         boolean isInPlace = receivedWifi != null && receivedWifi.stream()
                 .anyMatch(w -> w.getSsid() != null && placeApSsids.contains(w.getSsid()));
 
+        Instant now = Instant.now();
+
         if (isInPlace) {
+            // 구역 내에 있음: 마지막 감지 시간 업데이트 및 이탈 상태 해제
+            lastSeenTime.put(module.getId(), now);
+            if (Boolean.TRUE.equals(isCurrentlyLeaved.get(module.getId()))) {
+                isCurrentlyLeaved.put(module.getId(), false);
+                // (선택 사항) 다시 돌아왔다는 알림을 보낼 수도 있습니다.
+            }
             return;
         }
 
-        // 30초 이내 이미 알림을 보낸 경우 중복 방지
-        Instant last = lastAlertTime.getOrDefault(module.getId(), Instant.MIN);
-        if (Instant.now().isBefore(last.plusSeconds(ALERT_THROTTLE_SECONDS))) {
+        // 구역 내 AP가 보이지 않음: 마지막으로 본 시각으로부터 얼마나 지났는지 체크
+        Instant lastSeen = lastSeenTime.get(module.getId());
+        
+        // 만약 처음 신호를 받았는데 AP가 없다면 현재 시간을 처음 안 보인 시간으로 설정
+        if (lastSeen == null) {
+            lastSeenTime.put(module.getId(), now);
             return;
         }
 
-        Leave leave = new Leave();
-        leave.setModule(module);
-        leave.setLeavedAt(Instant.now());
-        Leave saved = leaveRepository.save(leave);
+        // 5분 이상 안 보였고, 아직 이탈 알림을 보내지 않은 상태라면 이탈 처리
+        if (now.isAfter(lastSeen.plusSeconds(LEAVE_THRESHOLD_MINUTES * 60))) {
+            if (!Boolean.TRUE.equals(isCurrentlyLeaved.get(module.getId()))) {
+                
+                Leave leave = new Leave();
+                leave.setModule(module);
+                leave.setLeavedAt(now);
+                Leave saved = leaveRepository.save(leave);
 
-        lastAlertTime.put(module.getId(), saved.getLeavedAt());
+                isCurrentlyLeaved.put(module.getId(), true);
 
-        LeaveAlertMessage alert = new LeaveAlertMessage(
-                saved.getId(),
-                module.getModuleNum(),
-                module.getPlace().getId(),
-                saved.getLeavedAt()
-        );
+                LeaveAlertMessage alert = new LeaveAlertMessage(
+                        saved.getId(),
+                        module.getModuleNum(),
+                        module.getPlace().getId(),
+                        saved.getLeavedAt()
+                );
 
-        messagingTemplate.convertAndSend("/topic/leave/" + placeId, alert);
+                messagingTemplate.convertAndSend("/topic/leave/" + placeId, alert);
+            }
+        }
     }
 }
