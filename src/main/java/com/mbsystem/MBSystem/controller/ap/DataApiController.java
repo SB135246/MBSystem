@@ -4,6 +4,7 @@ import com.mbsystem.MBSystem.dto.RssiScanRequest;
 import com.mbsystem.MBSystem.dto.SensorDataRequest;
 import com.mbsystem.MBSystem.dto.SosRequest;
 import com.mbsystem.MBSystem.service.ap.LocationService;
+import com.mbsystem.MBSystem.service.leave.LeaveService;
 import com.mbsystem.MBSystem.service.sos.SosService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -23,7 +24,7 @@ public class DataApiController {
 
     private final LocationService locationService;
     private final SosService sosService;
-    private final com.mbsystem.MBSystem.service.wearing.WearingService wearingService;
+    private final LeaveService leaveService;
 
     @PostMapping("/data")
     public ResponseEntity<String> receiveSensorData(@RequestBody SensorDataRequest request) {
@@ -33,9 +34,6 @@ public class DataApiController {
         log.info("장소 ID: {}", request.getPlace_id());
         log.info("버튼 상태: {}, SOS: {}", request.getBtn(), request.getBtn_press_3s());
         log.info("센서 값 - 조도: {}, 터치: {}", request.getLight(), request.getTouch());
-
-        // 웨어링 상태 처리 및 전송
-        wearingService.processWearingData(request);
 
         // 2. 수신된 WiFi 개수 확인
         if (request.getWifi() != null) {
@@ -64,7 +62,7 @@ public class DataApiController {
             double[] locations = locationService.calculateUserLocation(rssiList);
         }
 
-        // 3. SOS 감지 → SosService 호출
+        // 3. 우영민 - SOS 트리거 감지 → SosService 호출
         if (request.getBtn_press_3s() == 1) {
             log.info("[SOS] 긴급 호출 감지 - 모듈: {}", request.getModule_num());
 
@@ -86,6 +84,14 @@ public class DataApiController {
 
             sosService.triggerSos(sosRequest);
         }
+
+        // 4. 박기현 - 지정장소 이탈 감지 → LeaveService 호출
+        log.info("[이탈감지] 장소 이탈 여부 확인 - 모듈: {}", request.getModule_num());
+        leaveService.checkDeparture(
+                request.getModule_num(),
+                request.getPlace_id(),
+                request.getWifi()
+        );
 
         log.info("===== 데이터 처리 완료 =====\n");
 
