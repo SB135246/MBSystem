@@ -28,14 +28,12 @@ public class DataApiController {
 
     @PostMapping("/data")
     public ResponseEntity<String> receiveSensorData(@RequestBody SensorDataRequest request) {
-        // 1. 전체 데이터 로그 출력 (IntelliJ 콘솔 확인용)
         log.info("===== 데이터 수신 시작 =====");
         log.info("모듈 번호: {}", request.getModule_num());
         log.info("장소 ID: {}", request.getPlace_id());
         log.info("버튼 상태: {}, SOS: {}", request.getBtn(), request.getBtn_press_3s());
         log.info("센서 값 - 조도: {}, 터치: {}", request.getLight(), request.getTouch());
 
-        // 2. 수신된 WiFi 개수 확인 및 위치 계산
         if (request.getWifi() != null) {
             log.info("스캔된 WiFi 개수: {}개", request.getWifi().size());
 
@@ -53,22 +51,18 @@ public class DataApiController {
                     })
                     .collect(Collectors.toList());
 
-            // 👉 결과 확인 로그
             log.info("추출된 AP 개수: {}개", rssiList.size());
-            rssiList.forEach(r ->
-                    log.info(" -> [{}] RSSI: {}", r.getSsid(), r.getRssi())
-            );
+            rssiList.forEach(r -> log.info(" -> [{}] RSSI: {}", r.getSsid(), r.getRssi()));
 
-            double[] locations = locationService.calculateUserLocation(rssiList);
+            try {
+                locationService.calculateUserLocation(rssiList);
+            } catch (Exception e) {
+                log.warn("[Location] 위치 계산 실패: {}", e.getMessage());
+            }
         }
 
-        // 3. SOS 트리거 감지 → SosService 호출
         sosService.processSosData(request);
-
-        // 4. 지정장소 이탈 감지 → LeaveService 호출
         leaveService.checkDeparture(request);
-
-        // 5. 착용 상태 확인 및 웹소켓 전송 → WearingService 호출
         wearingService.processWearingData(request);
 
         log.info("===== 데이터 처리 완료 =====\n");
