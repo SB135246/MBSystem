@@ -16,6 +16,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
+import org.springframework.transaction.annotation.Transactional;
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -33,6 +35,7 @@ public class WearingService {
     // 터치 임계값: ESP32 analogRead(0-4095) 기준
     private static final int TOUCH_THRESHOLD = 1000;
 
+    @Transactional
     public void processWearingData(SensorDataRequest request) {
         boolean isWearing = determineWearingStatus(request.getLight(), request.getTouch());
         String statusKey = request.getPlace_id() + "_" + request.getModule_num();
