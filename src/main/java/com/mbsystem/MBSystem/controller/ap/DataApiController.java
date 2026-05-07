@@ -6,6 +6,7 @@ import com.mbsystem.MBSystem.dto.SosRequest;
 import com.mbsystem.MBSystem.service.ap.LocationService;
 import com.mbsystem.MBSystem.service.leave.LeaveService;
 import com.mbsystem.MBSystem.service.sos.SosService;
+import com.mbsystem.MBSystem.service.wearing.WearingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -25,6 +26,7 @@ public class DataApiController {
     private final LocationService locationService;
     private final SosService sosService;
     private final LeaveService leaveService;
+    private final WearingService wearingService;
 
     @PostMapping("/data")
     public ResponseEntity<String> receiveSensorData(@RequestBody SensorDataRequest request) {
@@ -93,8 +95,12 @@ public class DataApiController {
                 request.getWifi()
         );
 
+        // 5. 착용 상태 확인 및 웹소켓 전송 → WearingService 호출
+        log.info("[착용감지] 착용 상태 확인 - 모듈: {}", request.getModule_num());
+        wearingService.processWearingData(request);
+
         log.info("===== 데이터 처리 완료 =====\n");
 
-        return ResponseEntity.ok("Success: Data received at Sydney/Local Server");
+        return ResponseEntity.ok("Success: Data received and processed");
     }
 }
