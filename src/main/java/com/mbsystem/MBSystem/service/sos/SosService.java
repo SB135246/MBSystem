@@ -3,12 +3,13 @@ package com.mbsystem.MBSystem.service.sos;
 import com.mbsystem.MBSystem.domain.Module;
 import com.mbsystem.MBSystem.domain.Sos;
 import com.mbsystem.MBSystem.dto.RssiScanRequest;
+import com.mbsystem.MBSystem.dto.SensorDataRequest;
 import com.mbsystem.MBSystem.dto.SosAlertMessage;
-import com.mbsystem.MBSystem.dto.SosRequest;
 import com.mbsystem.MBSystem.repository.module.ModuleRepository;
 import com.mbsystem.MBSystem.repository.sos.SosRepository;
 import com.mbsystem.MBSystem.service.ap.LocationService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SosService {
@@ -33,9 +35,14 @@ public class SosService {
     private static final long REPEAT_INTERVAL_SECONDS = 30;
 
     @Transactional
-    public Long triggerSos(SosRequest request) {
-        Module module = moduleRepository.findByModuleNumAndPlaceId(request.getModuleNum(), request.getPlaceId())
-                .orElseThrow(() -> new IllegalArgumentException("등록되지 않은 모듈: " + request.getModuleNum()));
+    public void processSosData(SensorDataRequest request) {
+        if (request.getBtn_press_3s() != 1) return;
+
+        log.info("[SOS] 긴급 호출 감지 - 모듈: {}", request.getModule_num());
+
+        Module module = moduleRepository.findByModuleNumAndPlaceId(
+                        (long) request.getModule_num(), (long) request.getPlace_id())
+                .orElseThrow(() -> new IllegalArgumentException("등록되지 않은 모듈: " + request.getModule_num()));
 
         double[] coords = calculatePosition(request);
 
@@ -62,8 +69,6 @@ public class SosService {
 
         sendAlert(alert);
         scheduleRepeat(saved.getId(), alert);
-
-        return saved.getId();
     }
 
     @Transactional
@@ -77,7 +82,7 @@ public class SosService {
         cancelRepeat(sosId);
     }
 
-    private double[] calculatePosition(SosRequest request) {
+    private double[] calculatePosition(SensorDataRequest request) {
         if (request.getWifi() == null || request.getWifi().size() < 3) {
             return new double[0];
         }
@@ -86,9 +91,9 @@ public class SosService {
                     .map(w -> {
                         RssiScanRequest r = new RssiScanRequest();
                         r.setSsid(w.getSsid());
-                        r.setRssi(w.getRssi());
-                        r.setModuleNum(request.getModuleNum());
-                        r.setPlaceId(request.getPlaceId());
+                        r.setRssi((double) w.getRssi());
+                        r.setModuleNum((long) request.getModule_num());
+                        r.setPlaceId((long) request.getPlace_id());
                         return r;
                     })
                     .sorted((a, b) -> Double.compare(b.getRssi(), a.getRssi()))
