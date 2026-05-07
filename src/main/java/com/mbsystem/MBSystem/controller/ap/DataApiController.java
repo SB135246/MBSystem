@@ -62,10 +62,10 @@ public class DataApiController {
             double[] locations = locationService.calculateUserLocation(rssiList);
         }
 
-        // 3. 우영민 - SOS 트리거 감지 → SosService 호출
+        // 3. SOS 트리거 감지 → SosService 호출
         sosService.processSosData(request);
 
-        // 4. 박기현 - 지정장소 이탈 감지 → LeaveService 호출
+        // 4. 지정장소 이탈 감지 → LeaveService 호출
         leaveService.checkDeparture(request);
 
         // 5. 착용 상태 확인 및 웹소켓 전송 → WearingService 호출
