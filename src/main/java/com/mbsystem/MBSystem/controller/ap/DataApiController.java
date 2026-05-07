@@ -60,39 +60,9 @@ public class DataApiController {
                     log.info(" -> [{}] RSSI: {}", r.getSsid(), r.getRssi())
             );
 
-            double[] locations = locationService.calculateUserLocation(rssiList);
+            locationService.calculateUserLocation(rssiList);
         }
 
-        // 우영민 - SOS 트리거 감지 → SosService 호출
-        if (request.getBtn_press_3s() == 1) {
-            log.info("[SOS] 긴급 호출 감지 - 모듈: {}", request.getModule_num());
-
-            SosRequest sosRequest = new SosRequest();
-            sosRequest.setModuleNum((long) request.getModule_num());
-            sosRequest.setPlaceId((long) request.getPlace_id());
-
-            if (request.getWifi() != null) {
-                List<SosRequest.WifiInfo> sosWifi = request.getWifi().stream()
-                        .map(w -> {
-                            SosRequest.WifiInfo info = new SosRequest.WifiInfo();
-                            info.setSsid(w.getSsid());
-                            info.setRssi((double) w.getRssi());
-                            return info;
-                        })
-                        .collect(Collectors.toList());
-                sosRequest.setWifi(sosWifi);
-            }
-
-            sosService.triggerSos(sosRequest);
-        }
-
-        // 박기현 - 지정장소 이탈 감지 → LeaveService 호출
-        log.info("[이탈감지] 장소 이탈 여부 확인 - 모듈: {}", request.getModule_num());
-        leaveService.checkDeparture(
-                request.getModule_num(),
-                request.getPlace_id(),
-                request.getWifi()
-        );
 
         // 5. 착용 상태 확인 및 웹소켓 전송 → WearingService 호출
         log.info("[착용감지] 착용 상태 확인 - 모듈: {}", request.getModule_num());

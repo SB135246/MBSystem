@@ -1,9 +1,11 @@
 package com.mbsystem.MBSystem.service.ap;
 
 import com.mbsystem.MBSystem.domain.Ap;
+import com.mbsystem.MBSystem.dto.LocationResponse;
 import com.mbsystem.MBSystem.dto.RssiScanRequest;
 import com.mbsystem.MBSystem.repository.ap.ApRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -14,6 +16,7 @@ import java.util.stream.Collectors;
 public class LocationService {
 
   private final ApRepository apRepository;
+  private final SimpMessagingTemplate messagingTemplate;
 
   // 환경 변수 (현장 테스트 후 조정 필요)
   private static final double TX_POWER_1M = -45.0; // 1m 거리에서의 평균 RSSI
@@ -26,6 +29,9 @@ public class LocationService {
     if (scanRequests.size() < 3) {
       throw new IllegalArgumentException("삼변측량을 위해 최소 3개의 AP 데이터가 필요합니다.");
     }
+
+    Long moduleNum = scanRequests.get(0).getModuleNum();
+    Long placeId = scanRequests.get(0).getPlaceId();
 
     // 1. DB에서 AP 좌표 정보 매핑 및 거리 변환
     // 상위 3개만 사용한다고 가정 (리스트가 이미 정렬되어 왔거나, 여기서 정렬 수행)
@@ -42,7 +48,20 @@ public class LocationService {
         .collect(Collectors.toList());
 
     // 2. 삼변측량 계산 수행
-    return trilateration(points.get(0), points.get(1), points.get(2));
+    double[] location = trilateration(points.get(0), points.get(1), points.get(2));
+
+    LocationResponse response = new LocationResponse(
+            moduleNum,
+            placeId,
+            location[0],
+            location[1]
+    );
+
+    messagingTemplate.convertAndSend(
+        "/topic/location/" + placeId + "/" + moduleNum,
+        response
+    );
+    return location;
   }
 
   /**
