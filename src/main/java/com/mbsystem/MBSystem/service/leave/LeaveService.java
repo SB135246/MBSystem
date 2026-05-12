@@ -35,6 +35,8 @@ public class LeaveService {
     private final Map<Long, Instant> departureStartTimes = new ConcurrentHashMap<>();
     // 모듈별 알림 전송 여부 (이탈 중일 때 중복 알림 방지)
     private final Map<Long, Boolean> isAlertSentMap = new ConcurrentHashMap<>();
+    // 추가: 장소별 최신 알림을 저장 (메모리)
+    private final Map<Long, LeaveAlertMessage> lastAlertMap = new ConcurrentHashMap<>();
 
     private static final long LEAVE_DELAY_MINUTES = 5;
 
@@ -63,6 +65,7 @@ public class LeaveService {
             }
             departureStartTimes.remove(moduleId);
             isAlertSentMap.remove(moduleId);
+            lastAlertMap.remove((long) request.getPlace_id()); // 구역 내로 들어오면 최신 알림도 삭제
             return;
         }
 
@@ -100,9 +103,20 @@ public class LeaveService {
                     saved.getLeavedAt()
             );
 
+            // 1. 기존 웹소켓 전송 (유지)
             messagingTemplate.convertAndSend("/topic/leave/" + request.getPlace_id(), alert);
+            
+            // 2. 추가: 최신 알림을 메모리에 저장 (HTTP 전송용)
+            lastAlertMap.put((long) request.getPlace_id(), alert);
         } else {
             log.info("[이탈감지] 모듈 {} 이탈 중... (현재 {}분 경과)", request.getModule_num(), minutesPassed);
         }
+    }
+
+    /**
+     * 특정 장소의 최신 이탈 알림을 가져옵니다.
+     */
+    public LeaveAlertMessage getLastAlert(Long placeId) {
+        return lastAlertMap.get(placeId);
     }
 }
