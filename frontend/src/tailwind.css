@@ -22,3 +22,27 @@
 .animate-bell {
   animation: bell 0.6s ease-in-out infinite;
 }
+
+/* 📍 위치 이탈용 흔들림 애니메이션 */
+@keyframes locationShake {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+
+  25% {
+    transform: translateY(-4px);
+  }
+
+  50% {
+    transform: translateY(2px);
+  }
+
+  75% {
+    transform: translateY(-2px);
+  }
+}
+
+.animate-location {
+  animation: locationShake 0.8s ease-in-out infinite;
+}

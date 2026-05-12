@@ -7,6 +7,7 @@ import twoFloor from "./image/twoFloor.png";
 import threeFloor from "./image/threeFloor.png";
 
 import "./tailwind.css";
+import socket from "../src/socket/socket";
 
 const Home = () => {
   const navigate = useNavigate();
@@ -14,16 +15,114 @@ const Home = () => {
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertCount, setAlertCount] = useState(0);
   const [status, setStatus] = useState("safe");
+  const [alertType, setAlertType] = useState("");
 
   const audioRef = useRef(null);
-  const vibrationTimeoutRef = useRef(null); // 🔥 핵심
 
   const location = useLocation();
-
+  //테스트 코드 polling 방식
   useEffect(() => {
-    if (location.state?.triggerAlert) {
-      setAlertOpen(true); // 👉 바로 실행
-    }
+    const checkLeaveStatus = async () => {
+      try {
+        const response = await fetch(
+          "http://54.252.197.109:8080/api/leave/latest/1",
+        );
+
+        if (response.status === 200) {
+          const data = await response.json();
+
+          console.log("이탈 감지:", data);
+
+          setAlertOpen(true);
+          setStatus("alert");
+          setAlertType("leave");
+
+          setAlertCount((prev) => prev + 1);
+        }
+
+        if (response.status === 204) {
+          console.log("정상 상태");
+        }
+      } catch (error) {
+        console.error("이탈 상태 조회 실패:", error);
+      }
+    };
+
+    const timer = setInterval(checkLeaveStatus, 3000);
+
+    return () => clearInterval(timer);
+  }, []);
+
+  //웹 소켓 방식
+  useEffect(() => {
+    socket.onConnect = () => {
+      console.log("웹소켓 연결 성공");
+
+      socket.subscribe("/topic/leave/1", (message) => {
+        console.log("웹소켓 이탈 알림:", message.body);
+
+        setAlertOpen(true);
+        setStatus("alert");
+        setAlertType("leave");
+
+        setAlertCount((prev) => prev + 1);
+      });
+    };
+
+    socket.onStompError = (frame) => {
+      console.error("STOMP 에러:", frame);
+    };
+
+    socket.onWebSocketError = (error) => {
+      console.error("WebSocket 에러:", error);
+    };
+
+    socket.activate();
+
+    return () => {
+      socket.deactivate();
+    };
+  }, []);
+  //테스트 코드
+  useEffect(() => {
+    const sendLeaveData = async () => {
+      try {
+        await fetch("http://54.252.197.109:8080/api/data", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+
+          body: JSON.stringify({
+            module_num: 1,
+            place_id: 1,
+            btn: 0,
+            btn_press_3s: 0,
+            light: 0,
+            touch: 0,
+
+            wifi: [
+              {
+                ssid: "HOME_WIFI",
+                rssi: -95,
+              },
+            ],
+          }),
+        });
+
+        console.log("이탈 데이터 전송");
+      } catch (error) {
+        console.error(error);
+      }
+    };
+
+    // 처음 즉시 1번
+    sendLeaveData();
+
+    // 30초마다 반복 전송
+    const timer = setInterval(sendLeaveData, 30000);
+
+    return () => clearInterval(timer);
   }, []);
 
   // 🔊 오디오 준비
@@ -36,63 +135,14 @@ const Home = () => {
     };
   }, []);
 
-  // 🔥 5초마다 알림 발생
-  useEffect(() => {
-    const timer = setInterval(() => {
-      setAlertOpen(true);
-      setStatus("alert");
-      setAlertCount((prev) => prev + 1);
-    }, 5000);
-
-    return () => clearInterval(timer);
-  }, []);
-
-  // 1. 루프 함수를 useCallback이나 함수 밖으로 빼서 관리
-  const startVibrationLoop = () => {
-    if (!("vibrate" in navigator)) return;
-
-    const pattern = [500, 300, 500, 300, 500]; // 약 2초
-    const totalDuration = pattern.reduce((a, b) => a + b, 0);
-
-    const loop = () => {
-      // 진동 실행 전 이전 진동을 명시적으로 멈추지 말고 바로 덮어씌웁니다.
-      navigator.vibrate(pattern);
-      vibrationTimeoutRef.current = setTimeout(loop, totalDuration + 500);
-    };
-
-    loop();
-  };
-
-  const stopVibrationLoop = () => {
-    if (vibrationTimeoutRef.current) {
-      clearTimeout(vibrationTimeoutRef.current);
-      vibrationTimeoutRef.current = null;
-    }
-    if ("vibrate" in navigator) {
-      navigator.vibrate(0); // 여기서 완전히 정지
-    }
-  };
-
   useEffect(() => {
     if (alertOpen) {
+      // 🔊 알림음 재생
       audioRef.current?.play().catch(() => {});
-
-      navigator.vibrate(200);
-
-      const timer = setTimeout(() => {
-        startVibrationLoop();
-      }, 100);
-
-      return () => {
-        clearTimeout(timer);
-        stopVibrationLoop();
-      };
     } else {
-      // 🔥 이거 반드시 있어야 함
+      // 🔇 알림 종료
       audioRef.current?.pause();
       audioRef.current.currentTime = 0;
-
-      stopVibrationLoop();
     }
   }, [alertOpen]);
 
@@ -257,13 +307,34 @@ const Home = () => {
       {/* 🔥 SOS 모달 */}
       {alertOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl w-[80%] max-w-xs p-6 text-center border border-red-300 shadow-[0_0_40px_rgba(255,0,0,0.6)]">
+          <div
+            className={`bg-white rounded-2xl w-[80%] max-w-xs p-6 text-center border shadow-[0_0_40px_rgba(255,0,0,0.4)] ${
+              alertType === "leave" ? "border-orange-300" : "border-red-300"
+            }`}
+          >
             {/* 🔔 흔들리는 아이콘 */}
-            <div className="w-14 h-14 mx-auto mb-3 bg-red-100 rounded-full flex items-center justify-center">
-              <Bell size={28} className="text-red-500 animate-bell" />
+            <div
+              className={`w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center ${
+                alertType === "leave" ? "bg-orange-100" : "bg-red-100"
+              }`}
+            >
+              {alertType === "leave" ? (
+                <MapPin
+                  size={28}
+                  className="text-orange-500 animate-location"
+                />
+              ) : (
+                <Bell size={28} className="text-red-500 animate-bell" />
+              )}
             </div>
 
-            <p className="text-red-500 font-bold text-lg mb-2">SOS 신호</p>
+            <p
+              className={`font-bold text-lg mb-2 ${
+                alertType === "leave" ? "text-orange-500" : "text-red-500"
+              }`}
+            >
+              {alertType === "leave" ? "위치 이탈 감지" : "SOS 신호"}
+            </p>
 
             <button
               onClick={handleAlertConfirm}
