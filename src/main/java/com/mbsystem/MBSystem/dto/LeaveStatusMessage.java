@@ -9,8 +9,8 @@ import lombok.Setter;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class WearingStatusMessage {
+public class LeaveStatusMessage {
     private Long moduleNum;
     private Long placeId;
-    private boolean isWearing;
+    private boolean isInPlace; // 구역 내에 있는지 여부 (true: 정상, false: 이탈 중)
 }

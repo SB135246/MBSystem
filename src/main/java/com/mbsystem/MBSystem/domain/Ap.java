@@ -34,4 +34,7 @@ public class Ap {
   @JoinColumn(name = "place_id", nullable = false)
   private Place place;
 
+  @NotNull
+  @Column(name = "floor", nullable = false)
+  private Long floor;
 }

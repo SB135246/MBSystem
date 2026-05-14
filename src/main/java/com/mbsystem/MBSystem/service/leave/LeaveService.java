@@ -35,15 +35,8 @@ public class LeaveService {
     private final Map<Long, Instant> departureStartTimes = new ConcurrentHashMap<>();
     // 모듈별 알림 전송 여부 (이탈 중일 때 중복 알림 방지)
     private final Map<Long, Boolean> isAlertSentMap = new ConcurrentHashMap<>();
-    // 추가: 장소 및 모듈별 최신 알림을 저장 (메모리)
-    // Key format: "placeId_moduleNum"
-    private final Map<String, LeaveAlertMessage> lastAlertMap = new ConcurrentHashMap<>();
 
     private static final long LEAVE_DELAY_MINUTES = 5;
-
-    private String getAlertKey(Long placeId, Long moduleNum) {
-        return placeId + "_" + moduleNum;
-    }
 
     @Transactional
     public void checkDeparture(SensorDataRequest request) {
@@ -54,7 +47,6 @@ public class LeaveService {
         Long moduleId = module.getId();
         Long placeId = (long) request.getPlace_id();
         Long moduleNum = (long) request.getModule_num();
-        String alertKey = getAlertKey(placeId, moduleNum);
 
         // 해당 장소에 등록된 AP SSID 목록 조회
         List<Ap> placeAps = apRepository.findByPlaceId(placeId);
@@ -62,69 +54,68 @@ public class LeaveService {
                 .map(Ap::getSsid)
                 .collect(Collectors.toSet());
 
-        // 수신된 WiFi 중 장소 AP와 일치하는 SSID가 하나라도 있는지 확인
-        boolean isInPlace = request.getWifi() != null && request.getWifi().stream()
-                .anyMatch(w -> w.getSsid() != null && placeApSsids.contains(w.getSsid()));
+        // 수신된 WiFi 중 장소 AP와 일치하는 SSID의 개수 확인
+        long matchingApCount = request.getWifi() == null ? 0 : request.getWifi().stream()
+                .filter(w -> w.getSsid() != null && placeApSsids.contains(w.getSsid()))
+                .count();
 
-        if (isInPlace) {
-            // 구역 내에 있으면 이탈 관련 상태 초기화
+        // 1차 판단: 현재 AP가 2개 이상 잡히는가?
+        boolean isNowInPlace = matchingApCount >= 2;
+        boolean statusToSend = true; // 프론트에 보낼 상태 (기본값: 정상)
+
+        if (isNowInPlace) {
+            // --- 구역 내 정상 위치 ---
             if (departureStartTimes.containsKey(moduleId)) {
                 log.info("[이탈감지] 모듈 {} 구역 복귀 확인 - 상태 초기화", moduleNum);
             }
             departureStartTimes.remove(moduleId);
             isAlertSentMap.remove(moduleId);
-            lastAlertMap.remove(alertKey); // 해당 모듈이 복귀하면 해당 모듈의 최신 알림 삭제
-            return;
-        }
-
-        // --- 이탈 상태일 때 (지정된 AP가 없음) ---
-
-        // 처음 이탈이 감지된 시각 기록
-        Instant firstDetected = departureStartTimes.putIfAbsent(moduleId, Instant.now());
-        if (firstDetected == null) {
-            log.info("[이탈감지] 모듈 {} 이탈 처음 감지 - 5분 대기 시작", moduleNum);
-            return;
-        }
-
-        // 5분이 경과했는지 확인
-        long minutesPassed = java.time.Duration.between(firstDetected, Instant.now()).toMinutes();
-        
-        if (minutesPassed >= LEAVE_DELAY_MINUTES) {
-            // 이미 알림을 보냈는지 확인 (이탈 상태 유지 중 중복 알림 방지)
-            if (isAlertSentMap.getOrDefault(moduleId, false)) {
-                return;
-            }
-
-            log.warn("[이탈감지] 모듈 {} 5분 이상 이탈 유지 - 알림 전송", moduleNum);
-
-            Leave leave = new Leave();
-            leave.setModule(module);
-            leave.setLeavedAt(Instant.now());
-            Leave saved = leaveRepository.save(leave);
-
-            isAlertSentMap.put(moduleId, true);
-
-            LeaveAlertMessage alert = new LeaveAlertMessage(
-                    saved.getId(),
-                    module.getModuleNum(),
-                    module.getPlace().getId(),
-                    saved.getLeavedAt()
-            );
-
-            // 1. 웹소켓 전송
-            messagingTemplate.convertAndSend("/topic/leave/" + placeId, alert);
-            
-            // 2. 추가: 최신 알림을 메모리에 저장 (HTTP 전송용)
-            lastAlertMap.put(alertKey, alert);
+            statusToSend = true;
         } else {
-            log.info("[이탈감지] 모듈 {} 이탈 중... (현재 {}분 경과)", moduleNum, minutesPassed);
-        }
-    }
+            // --- 이탈 가능성 감지 (AP 1개 이하) ---
+            Instant firstDetected = departureStartTimes.putIfAbsent(moduleId, Instant.now());
+            
+            if (firstDetected == null) {
+                log.info("[이탈감지] 모듈 {} 이탈 처음 감지 - 5분 대기 시작 (아직 정상으로 표시)", moduleNum);
+                statusToSend = true; // 처음 감지 시엔 정상으로 보냄
+            } else {
+                long minutesPassed = java.time.Duration.between(firstDetected, Instant.now()).toMinutes();
+                
+                if (minutesPassed >= LEAVE_DELAY_MINUTES) {
+                    // --- 5분 경과: 확정적 이탈 ---
+                    statusToSend = false; // 드디어 이탈(false)로 보냄
+                    
+                    if (!isAlertSentMap.getOrDefault(moduleId, false)) {
+                        log.warn("[이탈감지] 모듈 {} 5분 이상 이탈 확정 - 알림 및 DB 저장", moduleNum);
+                        
+                        Leave leave = new Leave();
+                        leave.setModule(module);
+                        leave.setLeavedAt(Instant.now());
+                        Leave saved = leaveRepository.save(leave);
+                        isAlertSentMap.put(moduleId, true);
 
-    /**
-     * 특정 장소와 모듈의 최신 이탈 알림을 가져옵니다.
-     */
-    public LeaveAlertMessage getLastAlert(Long placeId, Long moduleNum) {
-        return lastAlertMap.get(getAlertKey(placeId, moduleNum));
+                        // 공식 알림 메시지 발송
+                        LeaveAlertMessage alert = new LeaveAlertMessage(
+                                saved.getId(),
+                                module.getModuleNum(),
+                                module.getPlace().getId(),
+                                saved.getLeavedAt()
+                        );
+                        messagingTemplate.convertAndSend("/topic/leave/" + placeId + "/" + moduleNum, alert);
+                    }
+                } else {
+                    log.info("[이탈감지] 모듈 {} 이탈 유지 중... (현재 {}분 경과, 아직 정상으로 표시)", moduleNum, minutesPassed);
+                    statusToSend = true; // 5분 전까지는 계속 정상으로 보냄
+                }
+            }
+        }
+
+        // --- 실시간 상태 전송 (지연 로직 반영됨) ---
+        com.mbsystem.MBSystem.dto.LeaveStatusMessage statusMessage = new com.mbsystem.MBSystem.dto.LeaveStatusMessage(
+                moduleNum,
+                placeId,
+                statusToSend
+        );
+        messagingTemplate.convertAndSend("/topic/leave/" + placeId + "/" + moduleNum, statusMessage);
     }
 }

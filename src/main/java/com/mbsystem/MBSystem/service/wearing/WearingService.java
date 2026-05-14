@@ -11,8 +11,6 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
-import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -52,23 +50,20 @@ public class WearingService {
         lastStatusMap.put(statusKey, isWearing);
 
         WearingStatusMessage message = new WearingStatusMessage(
-                request.getModule_num(),
-                request.getPlace_id(),
-                isWearing,
-                request.getLight(),
-                request.getTouch()
+                (long) request.getModule_num(),
+                (long) request.getPlace_id(),
+                isWearing
         );
 
         // 프론트엔드로 실시간 상태 전송
-        String destination = "/topic/wearing/" + request.getPlace_id();
-        messagingTemplate.convertAndSend(destination, message);
+        messagingTemplate.convertAndSend("/topic/wearing/"+ message.getPlaceId()+ "/" + message.getModuleNum(), message);
 
         log.info("[Wearing] 장소 {} 모듈 {}: 착용 상태 = {}, (조도: {}, 터치: {})", 
                 request.getPlace_id(), request.getModule_num(), isWearing ? "착용 중" : "미착용", request.getLight(), request.getTouch());
     }
 
     private boolean determineWearingStatus(float light, int touch) {
-        return (light <= LUX_THRESHOLD) || (touch >= TOUCH_THRESHOLD);
+        return (light <= LUX_THRESHOLD) || (touch <= TOUCH_THRESHOLD);
     }
 
     private void saveWearingRecord(SensorDataRequest request) {
@@ -80,17 +75,5 @@ public class WearingService {
                     wearingRepository.save(wearing);
                     log.info("[Wearing] 미착용 감지: DB 기록 완료 (모듈 {})", request.getModule_num());
                 });
-    }
-
-    // 특정 장소의 실시간 상태 조회용 (Controller에서 사용 가능)
-    public boolean getRecentStatus(int placeId, int moduleNum) {
-        return lastStatusMap.getOrDefault(placeId + "_" + moduleNum, false);
-    }
-
-    // 특정 모듈의 미착용 이력 조회
-    public List<Wearing> getWearingHistory(int moduleNum, int placeId) {
-        return moduleRepository.findByModuleNumAndPlaceId((long) moduleNum, (long) placeId)
-                .map(module -> wearingRepository.findById(module.getId()))
-                .orElse(Collections.emptyList());
     }
 }

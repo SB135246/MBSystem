@@ -14,4 +14,6 @@ public class LocationResponse {
 
   private double x;
   private double y;
+
+  private double floor;
 }
