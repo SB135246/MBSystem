@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Bell, Clock, Wifi, MapPin } from "lucide-react";
+import { Bell, Clock, Wifi, MapPin, ShieldAlert } from "lucide-react";
 
 import oneFloor from "./image/oneFloor.png";
 import twoFloor from "./image/twoFloor.png";
@@ -16,17 +16,18 @@ const Home = () => {
   const [alertCount, setAlertCount] = useState(0);
   const [status, setStatus] = useState("safe");
   const [alertType, setAlertType] = useState("");
+  const [currentSosId, setCurrentSosId] = useState(null);
 
   const audioRef = useRef(null);
 
   const location = useLocation();
+
+  const API_URL = import.meta.env.VITE_API_URL;
   //테스트 코드 polling 방식
   useEffect(() => {
     const checkLeaveStatus = async () => {
       try {
-        const response = await fetch(
-          "http://54.252.197.109:8080/api/leave/latest/1",
-        );
+        const response = await fetch(`${API_URL}/leave/latest/1`);
 
         if (response.status === 200) {
           const data = await response.json();
@@ -53,17 +54,49 @@ const Home = () => {
     return () => clearInterval(timer);
   }, []);
 
-  //웹 소켓 방식
   useEffect(() => {
     socket.onConnect = () => {
       console.log("웹소켓 연결 성공");
 
+      // 📍 위치 이탈 알림
       socket.subscribe("/topic/leave/1", (message) => {
         console.log("웹소켓 이탈 알림:", message.body);
 
         setAlertOpen(true);
         setStatus("alert");
         setAlertType("leave");
+
+        setAlertCount((prev) => prev + 1);
+      });
+
+      // 🛡️ 착용 해제 알림
+      socket.subscribe("/topic/wearing/1", (message) => {
+        const data = JSON.parse(message.body);
+
+        console.log("착용 상태:", data);
+
+        // 미착용 상태일 때만
+        if (!data.wearing) {
+          setAlertOpen(true);
+          setStatus("alert");
+          setAlertType("wearing");
+
+          setAlertCount((prev) => prev + 1);
+        }
+      });
+
+      // 🚨 SOS 알림
+      socket.subscribe("/topic/sos/1", (message) => {
+        const data = JSON.parse(message.body);
+
+        console.log("SOS 수신:", data);
+
+        // 서버가 보낸 sosId 저장
+        setCurrentSosId(data.sosId);
+
+        setAlertOpen(true);
+        setStatus("alert");
+        setAlertType("sos");
 
         setAlertCount((prev) => prev + 1);
       });
@@ -83,44 +116,119 @@ const Home = () => {
       socket.deactivate();
     };
   }, []);
-  //테스트 코드
-  useEffect(() => {
-    const sendLeaveData = async () => {
-      try {
-        await fetch("http://54.252.197.109:8080/api/data", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+  // 테스트 모드
+  // "leave" | "wearing" | "sos"
+  const TEST_MODE = "sos";
 
-          body: JSON.stringify({
+  useEffect(() => {
+    const sendTestData = async () => {
+      try {
+        let testData = {};
+
+        // 📍 위치 이탈 테스트
+        if (TEST_MODE === "leave") {
+          testData = {
             module_num: 1,
             place_id: 1,
             btn: 0,
             btn_press_3s: 0,
             light: 0,
+            touch: 300,
+
+            wifi: [
+              {
+                ssid: "AP1",
+                rssi: -95,
+              },
+              {
+                ssid: "AP2",
+                rssi: -90,
+              },
+              {
+                ssid: "AP3",
+                rssi: -92,
+              },
+            ],
+          };
+        }
+
+        // 🛡️ 착용 해제 테스트
+        if (TEST_MODE === "wearing") {
+          testData = {
+            module_num: 1,
+            place_id: 1,
+            btn: 0,
+            btn_press_3s: 0,
+            light: 300,
             touch: 0,
 
             wifi: [
               {
-                ssid: "HOME_WIFI",
-                rssi: -95,
+                ssid: "AP1",
+                rssi: -40,
+              },
+              {
+                ssid: "AP2",
+                rssi: -45,
+              },
+              {
+                ssid: "AP3",
+                rssi: -50,
               },
             ],
-          }),
+          };
+        }
+
+        // 🚨 SOS 테스트
+        if (TEST_MODE === "sos") {
+          testData = {
+            module_num: 1,
+            place_id: 1,
+            btn: 0,
+            btn_press_3s: 1,
+            light: 0,
+            touch: 300,
+
+            wifi: [
+              {
+                ssid: "AP1",
+                rssi: -40,
+              },
+              {
+                ssid: "AP2",
+                rssi: -45,
+              },
+              {
+                ssid: "AP3",
+                rssi: -50,
+              },
+            ],
+          };
+        }
+
+        const response = await fetch(`${API_URL}/data`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(testData),
         });
 
-        console.log("이탈 데이터 전송");
+        console.log("테스트 데이터 전송");
+        console.log("status =", response.status);
+
+        const text = await response.text();
+        console.log("response =", text);
       } catch (error) {
         console.error(error);
       }
     };
 
-    // 처음 즉시 1번
-    sendLeaveData();
+    // 처음 1회
+    sendTestData();
 
-    // 30초마다 반복 전송
-    const timer = setInterval(sendLeaveData, 30000);
+    // 30초마다 반복
+    const timer = setInterval(sendTestData, 30000);
 
     return () => clearInterval(timer);
   }, []);
@@ -146,12 +254,25 @@ const Home = () => {
     }
   }, [alertOpen]);
 
-  const handleAlertConfirm = () => {
-    audioRef.current?.pause(); // 🔥 추가
-    audioRef.current.currentTime = 0;
+  const handleAlertConfirm = async () => {
+    try {
+      // 🚨 SOS 확인 API 호출
+      if (alertType === "sos" && currentSosId) {
+        await fetch(`${API_URL}/sos/confirm/${currentSosId}`, {
+          method: "POST",
+        });
 
-    setAlertOpen(false);
-    setStatus("safe");
+        console.log("SOS 확인 완료");
+      }
+
+      audioRef.current?.pause();
+      audioRef.current.currentTime = 0;
+
+      setAlertOpen(false);
+      setStatus("safe");
+    } catch (error) {
+      console.error("SOS 확인 실패:", error);
+    }
   };
   return (
     <div className="flex flex-col min-h-[100dvh] bg-[#F8F9FA]">
@@ -304,7 +425,7 @@ const Home = () => {
         </main>
       </div>
 
-      {/* 🔥 SOS 모달 */}
+      {/* 모달 */}
       {alertOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div
@@ -315,13 +436,22 @@ const Home = () => {
             {/* 🔔 흔들리는 아이콘 */}
             <div
               className={`w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center ${
-                alertType === "leave" ? "bg-orange-100" : "bg-red-100"
+                alertType === "leave"
+                  ? "bg-orange-100"
+                  : alertType === "wearing"
+                    ? "bg-purple-100"
+                    : "bg-red-100"
               }`}
             >
               {alertType === "leave" ? (
                 <MapPin
                   size={28}
                   className="text-orange-500 animate-location"
+                />
+              ) : alertType === "wearing" ? (
+                <ShieldAlert
+                  size={28}
+                  className="text-purple-500 animate-wearing"
                 />
               ) : (
                 <Bell size={28} className="text-red-500 animate-bell" />
@@ -330,10 +460,18 @@ const Home = () => {
 
             <p
               className={`font-bold text-lg mb-2 ${
-                alertType === "leave" ? "text-orange-500" : "text-red-500"
+                alertType === "leave"
+                  ? "text-orange-500"
+                  : alertType === "wearing"
+                    ? "text-purple-500"
+                    : "text-red-500"
               }`}
             >
-              {alertType === "leave" ? "위치 이탈 감지" : "SOS 신호"}
+              {alertType === "leave"
+                ? "위치 이탈 감지"
+                : alertType === "wearing"
+                  ? "착용 해제 감지"
+                  : "SOS 신호"}
             </p>
 
             <button

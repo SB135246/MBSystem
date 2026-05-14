@@ -9,13 +9,51 @@ const AdminLogin = () => {
   const [id, setId] = useState("");
   const [pw, setPw] = useState("");
 
-  const handleLogin = () => {
-    // 🔥 임시 로그인 조건
-    if (id === "admin" && pw === "1234") {
-      localStorage.setItem("isAdmin", "true"); // 로그인 상태 저장
+  const API_URL = import.meta.env.VITE_API_URL;
+
+  const handleLogin = async () => {
+    try {
+      const response = await fetch(`${API_URL}/manager/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+
+        body: JSON.stringify({
+          loginId: id,
+          loginPw: pw,
+        }),
+      });
+
+      // 로그인 실패
+      if (!response.ok) {
+        alert("아이디 또는 비밀번호가 틀렸습니다.");
+        return;
+      }
+
+      // 로그인 성공 데이터
+      const data = await response.json();
+
+      console.log("로그인 성공:", data);
+
+      // localStorage 저장
+      localStorage.setItem("isAdmin", "true");
+
+      localStorage.setItem("managerId", data.managerId);
+
+      localStorage.setItem("managerName", data.name);
+
+      localStorage.setItem(
+        "managedPlaceIds",
+        JSON.stringify(data.managedPlaceIds),
+      );
+
+      // 관리자 페이지 이동
       navigate("/admin/dashboard");
-    } else {
-      alert("아이디 또는 비밀번호가 틀렸습니다.");
+    } catch (error) {
+      console.error("로그인 오류:", error);
+
+      alert("서버 연결 실패");
     }
   };
 
