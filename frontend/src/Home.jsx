@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { Bell, Clock, Wifi, MapPin, ShieldAlert } from "lucide-react";
+import { useAlert } from "./context/AlertContext";
 
 import oneFloor from "./image/oneFloor.png";
 import twoFloor from "./image/twoFloor.png";
@@ -18,49 +19,75 @@ const Home = () => {
   const [alertType, setAlertType] = useState("");
   const [currentSosId, setCurrentSosId] = useState(null);
 
+  // 📍 실시간 위치 상태 추가 (기본값 1층)
+  const [currentFloor, setCurrentFloor] = useState(1);
+
+  const floorImages = {
+    1: oneFloor,
+    2: twoFloor,
+    3: threeFloor,
+  };
+
+  const [markerPosition, setMarkerPosition] = useState({
+    x: 195,
+    y: 160,
+  });
+
+  const [lastUpdated, setLastUpdated] = useState("");
+
+  const { alerts, addAlert } = useAlert();
+
   const audioRef = useRef(null);
 
-  const location = useLocation();
-
   const API_URL = import.meta.env.VITE_API_URL;
-  //테스트 코드 polling 방식
-  useEffect(() => {
-    const checkLeaveStatus = async () => {
-      try {
-        const response = await fetch(`${API_URL}/leave/latest/1`);
+  const WS_URL = import.meta.env.VITE_WS_URL;
 
-        if (response.status === 200) {
-          const data = await response.json();
-
-          console.log("이탈 감지:", data);
-
-          setAlertOpen(true);
-          setStatus("alert");
-          setAlertType("leave");
-
-          setAlertCount((prev) => prev + 1);
-        }
-
-        if (response.status === 204) {
-          console.log("정상 상태");
-        }
-      } catch (error) {
-        console.error("이탈 상태 조회 실패:", error);
-      }
-    };
-
-    const timer = setInterval(checkLeaveStatus, 3000);
-
-    return () => clearInterval(timer);
-  }, []);
+  const { placeId, moduleNum } = useParams();
 
   useEffect(() => {
     socket.onConnect = () => {
       console.log("웹소켓 연결 성공");
 
+      console.log(placeId + " " + moduleNum);
+
+      // 📍 [추가] 실시간 위치 정보 수신
+      socket.subscribe(`/topic/location/${placeId}/${moduleNum}`, (message) => {
+        try {
+          const data = JSON.parse(message.body);
+          console.log("실시간 위치 수신:", data);
+
+          // 서버에서 { "floor": 2 } 와 같은 형태로 온다고 가정
+          if (data.floor) {
+            setCurrentFloor(data.floor);
+          }
+
+          if (data.x !== undefined && data.y !== undefined) {
+            // 🔥 좌표 보정
+            const correctedX = data.x * 25 + 20;
+            const correctedY = data.y * 20 + 40;
+
+            console.log("보정 좌표:", correctedX, correctedY);
+
+            setMarkerPosition({
+              x: correctedX,
+              y: correctedY,
+            });
+          }
+
+          setLastUpdated(new Date());
+        } catch (e) {
+          console.error("위치 데이터 파싱 오류:", e);
+        }
+      });
+
       // 📍 위치 이탈 알림
-      socket.subscribe("/topic/leave/1", (message) => {
+      socket.subscribe(`/topic/leave/${placeId}/${moduleNum}`, (message) => {
         console.log("웹소켓 이탈 알림:", message.body);
+
+        addAlert({
+          type: "leave",
+          message: "위치 이탈",
+        });
 
         setAlertOpen(true);
         setStatus("alert");
@@ -70,13 +97,18 @@ const Home = () => {
       });
 
       // 🛡️ 착용 해제 알림
-      socket.subscribe("/topic/wearing/1", (message) => {
+      socket.subscribe(`/topic/wearing/${placeId}/${moduleNum}`, (message) => {
         const data = JSON.parse(message.body);
 
         console.log("착용 상태:", data);
 
         // 미착용 상태일 때만
         if (!data.wearing) {
+          addAlert({
+            type: "wearing",
+            message: "장치 탈거 감지",
+          });
+
           setAlertOpen(true);
           setStatus("alert");
           setAlertType("wearing");
@@ -86,13 +118,18 @@ const Home = () => {
       });
 
       // 🚨 SOS 알림
-      socket.subscribe("/topic/sos/1", (message) => {
+      socket.subscribe(`/topic/sos/${placeId}/${moduleNum}`, (message) => {
         const data = JSON.parse(message.body);
 
         console.log("SOS 수신:", data);
 
         // 서버가 보낸 sosId 저장
         setCurrentSosId(data.sosId);
+
+        addAlert({
+          type: "sos",
+          message: "SOS 신호",
+        });
 
         setAlertOpen(true);
         setStatus("alert");
@@ -120,7 +157,7 @@ const Home = () => {
   // "leave" | "wearing" | "sos"
   const TEST_MODE = "sos";
 
-  useEffect(() => {
+  /*useEffect(() => {
     const sendTestData = async () => {
       try {
         let testData = {};
@@ -128,12 +165,12 @@ const Home = () => {
         // 📍 위치 이탈 테스트
         if (TEST_MODE === "leave") {
           testData = {
-            module_num: 1,
+            module_num: 2,
             place_id: 1,
             btn: 0,
             btn_press_3s: 0,
             light: 0,
-            touch: 300,
+            touch: 0,
 
             wifi: [
               {
@@ -155,7 +192,7 @@ const Home = () => {
         // 🛡️ 착용 해제 테스트
         if (TEST_MODE === "wearing") {
           testData = {
-            module_num: 1,
+            module_num: 2,
             place_id: 1,
             btn: 0,
             btn_press_3s: 0,
@@ -182,12 +219,12 @@ const Home = () => {
         // 🚨 SOS 테스트
         if (TEST_MODE === "sos") {
           testData = {
-            module_num: 1,
+            module_num: 2,
             place_id: 1,
             btn: 0,
             btn_press_3s: 1,
             light: 0,
-            touch: 300,
+            touch: 0,
 
             wifi: [
               {
@@ -228,10 +265,10 @@ const Home = () => {
     sendTestData();
 
     // 30초마다 반복
-    const timer = setInterval(sendTestData, 30000);
+    const timer = setInterval(sendTestData, 10000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, []);*/
 
   // 🔊 오디오 준비
   useEffect(() => {
@@ -274,22 +311,35 @@ const Home = () => {
       console.error("SOS 확인 실패:", error);
     }
   };
+
+  const getRelativeTime = () => {
+    if (!lastUpdated) return "수신 대기중";
+
+    const diff = Math.floor((Date.now() - lastUpdated.getTime()) / 1000);
+
+    if (diff < 10) return "방금 전";
+    if (diff < 60) return `${diff}초 전`;
+
+    const minutes = Math.floor(diff / 60);
+
+    if (minutes < 60) return `${minutes}분 전`;
+
+    const hours = Math.floor(minutes / 60);
+
+    return `${hours}시간 전`;
+  };
   return (
     <div className="flex flex-col min-h-[100dvh] bg-[#F8F9FA]">
       <div className="w-full max-w-md mx-auto flex flex-col flex-1">
         {/* Header */}
         <header className="sticky top-0 z-50 bg-[#0052CC] text-white px-4 py-4 flex justify-center items-center relative">
           <h1 className="text-[clamp(1.2rem,4vw,1.8rem)] font-bold">MBS</h1>
-
-          {/* 🔥 위치 수정된 알림 버튼 */}
           <div className="absolute right-4 top-1/2 -translate-y-1/2">
             <div
               onClick={() => navigate("/alerts")}
-              className="relative bg-[#FF4D4D] rounded-full p-2 flex items-center justify-center cursor-pointer active:scale-95"
+              className="relative bg-[#FF4D4D] rounded-full p-2 cursor-pointer"
             >
               <Bell size={18} fill="white" stroke="white" />
-
-              {/* 알림 숫자 */}
               {alertCount > 0 && (
                 <span className="absolute -top-1 -right-1 bg-white text-red-500 text-[10px] px-1 rounded-full font-bold">
                   {alertCount}
@@ -299,80 +349,67 @@ const Home = () => {
           </div>
         </header>
 
-        {/* Main */}
+        {/* Main Content */}
         <main className="flex-1 p-3 sm:p-4 space-y-4">
-          {/* 가변 안전/위험 상태 섹션 */}
+          {/* 상태 표시 섹션 */}
           <section
-            className={`rounded-xl border shadow-sm overflow-hidden transition-all duration-500 ${
-              status === "alert"
-                ? "bg-red-50 border-red-200"
-                : "bg-green-50 border-green-100" // 🔥 회색에서 연한 초록색으로 변경
-            }`}
+            className={`rounded-xl border shadow-sm transition-all duration-500 ${status === "alert" ? "bg-red-50 border-red-200" : "bg-green-50 border-green-100"}`}
           >
             <div className="py-4 flex justify-center items-center gap-3">
-              {/* 상태 점(Dot) */}
-              <div className="relative flex h-3 w-3">
+              <span
+                className={`relative inline-flex rounded-full h-3 w-3 ${status === "alert" ? "bg-red-500" : "bg-[#00B341]"}`}
+              >
                 {status === "alert" && (
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                 )}
-                <span
-                  className={`relative inline-flex rounded-full h-3 w-3 ${
-                    status === "alert" ? "bg-red-500" : "bg-[#00B341]"
-                  }`}
-                ></span>
-              </div>
-
-              {/* 텍스트 */}
+              </span>
               <span
-                className={`text-[clamp(1.1rem,4.5vw,1.4rem)] font-extrabold tracking-tight ${
-                  status === "alert" ? "text-red-600" : "text-[#00B341]"
-                }`}
+                className={`text-[clamp(1.1rem,4.5vw,1.4rem)] font-extrabold ${status === "alert" ? "text-red-600" : "text-[#00B341]"}`}
               >
                 {status === "alert" ? "위험" : "안전"}
               </span>
             </div>
           </section>
 
-          {/* 업데이트 시간 */}
           <div className="py-1 flex justify-center items-center text-[clamp(0.75rem,3vw,0.9rem)] text-[#868E96]">
             <Clock size={16} className="mr-1" />
-            마지막 업데이트 : 방금전
+            마지막 업데이트 : {getRelativeTime()}
           </div>
 
-          {/* 현재 위치 */}
+          {/* 현재 위치 섹션 - currentFloor 상태 반영 */}
           <section className="bg-white rounded-xl p-4 border border-[#E9ECEF] shadow-sm">
             <h2 className="text-[#495057] font-bold text-sm">현재 위치</h2>
-
             <div className="flex justify-center py-3">
               <span className="font-extrabold text-[#1A3A6B] text-[clamp(2rem,8vw,3rem)]">
-                1층
+                {currentFloor}층
               </span>
             </div>
           </section>
 
-          {/* 지도 */}
+          {/* 구조도 섹션 - currentFloor 상태 반영 */}
           <section className="bg-white rounded-xl p-4 border border-[#E9ECEF] shadow-sm">
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-[#343A40] font-bold text-sm">
                 IT관 내부 구조도
               </h2>
-
               <div className="bg-[#0062FF] text-white text-[clamp(0.6rem,2.5vw,0.75rem)] px-3 py-1 rounded-full">
-                현재 층 : 1층
+                현재 층 : {currentFloor}층
               </div>
             </div>
-
             <div className="relative w-full aspect-[2/1] flex items-center justify-center">
               <img
-                src={oneFloor}
-                alt="IT관 구조도"
+                src={floorImages[currentFloor] || oneFloor}
+                alt={`${currentFloor}층 구조도`}
                 className="w-full h-full object-contain"
               />
-
-              {/* 마커 */}
-              <div className="absolute bottom-[2%] left-[50%] -translate-x-1/2 flex flex-col items-center">
+              <div
+                className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center transition-all duration-500"
+                style={{
+                  left: `${markerPosition.x}px`,
+                  top: `${markerPosition.y}px`,
+                }}
+              >
                 <MapPin size={24} className="text-[#0062FF] fill-[#0062FF]" />
-
                 <div className="bg-[#0062FF] text-white text-[clamp(0.5rem,2vw,0.7rem)] px-2 py-[2px] rounded mt-1">
                   현재 위치
                 </div>
@@ -425,15 +462,18 @@ const Home = () => {
         </main>
       </div>
 
-      {/* 모달 */}
+      {/* 경보 모달 */}
       {alertOpen && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
           <div
-            className={`bg-white rounded-2xl w-[80%] max-w-xs p-6 text-center border shadow-[0_0_40px_rgba(255,0,0,0.4)] ${
-              alertType === "leave" ? "border-orange-300" : "border-red-300"
+            className={`bg-white rounded-2xl w-[80%] max-w-xs p-6 text-center border shadow-xl ${
+              alertType === "leave"
+                ? "border-orange-300"
+                : alertType === "wearing"
+                  ? "border-purple-300"
+                  : "border-red-300"
             }`}
           >
-            {/* 🔔 흔들리는 아이콘 */}
             <div
               className={`w-14 h-14 mx-auto mb-3 rounded-full flex items-center justify-center ${
                 alertType === "leave"
@@ -444,20 +484,13 @@ const Home = () => {
               }`}
             >
               {alertType === "leave" ? (
-                <MapPin
-                  size={28}
-                  className="text-orange-500 animate-location"
-                />
+                <MapPin size={28} className="text-orange-500" />
               ) : alertType === "wearing" ? (
-                <ShieldAlert
-                  size={28}
-                  className="text-purple-500 animate-wearing"
-                />
+                <ShieldAlert size={28} className="text-purple-500" />
               ) : (
-                <Bell size={28} className="text-red-500 animate-bell" />
+                <Bell size={28} className="text-red-500" />
               )}
             </div>
-
             <p
               className={`font-bold text-lg mb-2 ${
                 alertType === "leave"
@@ -471,12 +504,11 @@ const Home = () => {
                 ? "위치 이탈 감지"
                 : alertType === "wearing"
                   ? "착용 해제 감지"
-                  : "SOS 신호"}
+                  : "SOS 신호 발생"}
             </p>
-
             <button
               onClick={handleAlertConfirm}
-              className="w-full bg-red-500 hover:bg-red-600 text-white py-4 rounded-2xl font-bold text-lg shadow-lg shadow-red-200 active:scale-95 transition-all"
+              className="w-full bg-red-500 text-white py-4 rounded-2xl font-bold active:scale-95 transition-all"
             >
               알림 닫기
             </button>

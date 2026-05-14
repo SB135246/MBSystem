@@ -36,11 +36,11 @@ const StartPage = () => {
 
       // 🔥 약간의 딜레이 후 이동
       setTimeout(() => {
-        navigate("/main");
+        navigate("/main/1/2");
       }, 100);
     } catch (e) {
       console.log("unlock 실패", e);
-      navigate("/main");
+      navigate("/main/1/2");
     }
   };
 
