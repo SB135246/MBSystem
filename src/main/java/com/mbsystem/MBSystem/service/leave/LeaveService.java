@@ -103,7 +103,7 @@ public class LeaveService {
             );
 
             // 웹소켓 전송 (실시간 알림)
-            messagingTemplate.convertAndSend("/topic/leave/" + placeId, alert);
+            messagingTemplate.convertAndSend("/topic/leave/" + placeId + "/" + moduleNum, alert);
         } else {
             log.info("[이탈감지] 모듈 {} 이탈 중... (현재 {}분 경과)", moduleNum, minutesPassed);
         }
