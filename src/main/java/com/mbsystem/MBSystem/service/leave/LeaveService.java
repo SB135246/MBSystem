@@ -58,6 +58,14 @@ public class LeaveService {
         boolean isInPlace = request.getWifi() != null && request.getWifi().stream()
                 .anyMatch(w -> w.getSsid() != null && placeApSsids.contains(w.getSsid()));
 
+        // --- 실시간 상태 전송 (Wearing 기능과 동일한 방식) ---
+        com.mbsystem.MBSystem.dto.LeaveStatusMessage statusMessage = new com.mbsystem.MBSystem.dto.LeaveStatusMessage(
+                moduleNum,
+                placeId,
+                isInPlace
+        );
+        messagingTemplate.convertAndSend("/topic/leave/status/" + placeId + "/" + moduleNum, statusMessage);
+
         if (isInPlace) {
             // 구역 내에 있으면 이탈 관련 상태 초기화
             if (departureStartTimes.containsKey(moduleId)) {
