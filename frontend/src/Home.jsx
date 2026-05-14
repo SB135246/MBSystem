@@ -19,23 +19,25 @@ const Home = () => {
   const [alertType, setAlertType] = useState("");
   const [currentSosId, setCurrentSosId] = useState(null);
 
-  // 📍 실시간 위치 상태 추가 (기본값 1층)
-  const [currentFloor, setCurrentFloor] = useState(1);
-
   const floorImages = {
     1: oneFloor,
     2: twoFloor,
     3: threeFloor,
   };
 
-  const [markerPosition, setMarkerPosition] = useState({
-    x: 195,
-    y: 160,
-  });
+  const {
+    alerts,
+    addAlert,
 
-  const [lastUpdated, setLastUpdated] = useState("");
+    lastUpdated,
+    setLastUpdated,
 
-  const { alerts, addAlert } = useAlert();
+    markerPosition,
+    setMarkerPosition,
+
+    currentFloor,
+    setCurrentFloor,
+  } = useAlert();
 
   const audioRef = useRef(null);
 
@@ -64,14 +66,25 @@ const Home = () => {
           if (data.x !== undefined && data.y !== undefined) {
             // 🔥 좌표 보정
             const correctedX = data.x * 25 + 20;
-            const correctedY = data.y * 20 + 40;
+            const correctedY = data.y * 20 + 75;
 
-            console.log("보정 좌표:", correctedX, correctedY);
+            // 비정상 좌표 필터링
+            if (
+              correctedX < 0 ||
+              correctedX > 300 ||
+              correctedY < 0 ||
+              correctedY > 250
+            ) {
+              console.log("비정상 좌표 무시");
 
-            setMarkerPosition({
-              x: correctedX,
-              y: correctedY,
-            });
+              return;
+            }
+
+            // 부드럽게 이동
+            setMarkerPosition((prev) => ({
+              x: prev.x * 0.7 + correctedX * 0.3,
+              y: prev.y * 0.7 + correctedY * 0.3,
+            }));
           }
 
           setLastUpdated(new Date());
@@ -94,6 +107,8 @@ const Home = () => {
         setAlertType("leave");
 
         setAlertCount((prev) => prev + 1);
+
+        setLastUpdated(new Date());
       });
 
       // 🛡️ 착용 해제 알림
@@ -114,6 +129,8 @@ const Home = () => {
           setAlertType("wearing");
 
           setAlertCount((prev) => prev + 1);
+
+          setLastUpdated(new Date());
         }
       });
 
@@ -136,6 +153,8 @@ const Home = () => {
         setAlertType("sos");
 
         setAlertCount((prev) => prev + 1);
+
+        setLastUpdated(new Date());
       });
     };
 
@@ -157,7 +176,7 @@ const Home = () => {
   // "leave" | "wearing" | "sos"
   const TEST_MODE = "sos";
 
-  /*useEffect(() => {
+  useEffect(() => {
     const sendTestData = async () => {
       try {
         let testData = {};
@@ -268,7 +287,7 @@ const Home = () => {
     const timer = setInterval(sendTestData, 10000);
 
     return () => clearInterval(timer);
-  }, []);*/
+  }, []);
 
   // 🔊 오디오 준비
   useEffect(() => {
@@ -410,9 +429,6 @@ const Home = () => {
                 }}
               >
                 <MapPin size={24} className="text-[#0062FF] fill-[#0062FF]" />
-                <div className="bg-[#0062FF] text-white text-[clamp(0.5rem,2vw,0.7rem)] px-2 py-[2px] rounded mt-1">
-                  현재 위치
-                </div>
               </div>
             </div>
           </section>
