@@ -35,10 +35,15 @@ public class LeaveService {
     private final Map<Long, Instant> departureStartTimes = new ConcurrentHashMap<>();
     // 모듈별 알림 전송 여부 (이탈 중일 때 중복 알림 방지)
     private final Map<Long, Boolean> isAlertSentMap = new ConcurrentHashMap<>();
-    // 추가: 장소별 최신 알림을 저장 (메모리)
-    private final Map<Long, LeaveAlertMessage> lastAlertMap = new ConcurrentHashMap<>();
+    // 추가: 장소 및 모듈별 최신 알림을 저장 (메모리)
+    // Key format: "placeId_moduleNum"
+    private final Map<String, LeaveAlertMessage> lastAlertMap = new ConcurrentHashMap<>();
 
     private static final long LEAVE_DELAY_MINUTES = 5;
+
+    private String getAlertKey(Long placeId, Long moduleNum) {
+        return placeId + "_" + moduleNum;
+    }
 
     @Transactional
     public void checkDeparture(SensorDataRequest request) {
@@ -47,9 +52,12 @@ public class LeaveService {
                 .orElseThrow(() -> new IllegalArgumentException("등록되지 않은 모듈: " + request.getModule_num()));
 
         Long moduleId = module.getId();
+        Long placeId = (long) request.getPlace_id();
+        Long moduleNum = (long) request.getModule_num();
+        String alertKey = getAlertKey(placeId, moduleNum);
 
         // 해당 장소에 등록된 AP SSID 목록 조회
-        List<Ap> placeAps = apRepository.findByPlaceId((long) request.getPlace_id());
+        List<Ap> placeAps = apRepository.findByPlaceId(placeId);
         Set<String> placeApSsids = placeAps.stream()
                 .map(Ap::getSsid)
                 .collect(Collectors.toSet());
@@ -61,11 +69,11 @@ public class LeaveService {
         if (isInPlace) {
             // 구역 내에 있으면 이탈 관련 상태 초기화
             if (departureStartTimes.containsKey(moduleId)) {
-                log.info("[이탈감지] 모듈 {} 구역 복귀 확인 - 상태 초기화", request.getModule_num());
+                log.info("[이탈감지] 모듈 {} 구역 복귀 확인 - 상태 초기화", moduleNum);
             }
             departureStartTimes.remove(moduleId);
             isAlertSentMap.remove(moduleId);
-            lastAlertMap.remove((long) request.getPlace_id()); // 구역 내로 들어오면 최신 알림도 삭제
+            lastAlertMap.remove(alertKey); // 해당 모듈이 복귀하면 해당 모듈의 최신 알림 삭제
             return;
         }
 
@@ -74,7 +82,7 @@ public class LeaveService {
         // 처음 이탈이 감지된 시각 기록
         Instant firstDetected = departureStartTimes.putIfAbsent(moduleId, Instant.now());
         if (firstDetected == null) {
-            log.info("[이탈감지] 모듈 {} 이탈 처음 감지 - 5분 대기 시작", request.getModule_num());
+            log.info("[이탈감지] 모듈 {} 이탈 처음 감지 - 5분 대기 시작", moduleNum);
             return;
         }
 
@@ -87,7 +95,7 @@ public class LeaveService {
                 return;
             }
 
-            log.warn("[이탈감지] 모듈 {} 5분 이상 이탈 유지 - 알림 전송", request.getModule_num());
+            log.warn("[이탈감지] 모듈 {} 5분 이상 이탈 유지 - 알림 전송", moduleNum);
 
             Leave leave = new Leave();
             leave.setModule(module);
@@ -103,20 +111,20 @@ public class LeaveService {
                     saved.getLeavedAt()
             );
 
-            // 1. 기존 웹소켓 전송 (유지)
-            messagingTemplate.convertAndSend("/topic/leave/" + request.getPlace_id(), alert);
+            // 1. 웹소켓 전송
+            messagingTemplate.convertAndSend("/topic/leave/" + placeId, alert);
             
             // 2. 추가: 최신 알림을 메모리에 저장 (HTTP 전송용)
-            lastAlertMap.put((long) request.getPlace_id(), alert);
+            lastAlertMap.put(alertKey, alert);
         } else {
-            log.info("[이탈감지] 모듈 {} 이탈 중... (현재 {}분 경과)", request.getModule_num(), minutesPassed);
+            log.info("[이탈감지] 모듈 {} 이탈 중... (현재 {}분 경과)", moduleNum, minutesPassed);
         }
     }
 
     /**
-     * 특정 장소의 최신 이탈 알림을 가져옵니다.
+     * 특정 장소와 모듈의 최신 이탈 알림을 가져옵니다.
      */
-    public LeaveAlertMessage getLastAlert(Long placeId) {
-        return lastAlertMap.get(placeId);
+    public LeaveAlertMessage getLastAlert(Long placeId, Long moduleNum) {
+        return lastAlertMap.get(getAlertKey(placeId, moduleNum));
     }
 }
