@@ -108,7 +108,7 @@ public class SosService {
     }
 
     private void sendAlert(SosAlertMessage alert) {
-        String destination = "/topic/sos/" + alert.getPlaceId();
+        String destination = "/topic/sos/" + alert.getPlaceId() + "/" + alert.getModuleNum();
         messagingTemplate.convertAndSend(destination, alert);
     }
 
