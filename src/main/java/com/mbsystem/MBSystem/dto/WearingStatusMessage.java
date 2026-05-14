@@ -10,9 +10,7 @@ import lombok.Setter;
 @NoArgsConstructor
 @AllArgsConstructor
 public class WearingStatusMessage {
-    private int moduleNum;
-    private int placeId;
+    private Long moduleNum;
+    private Long placeId;
     private boolean isWearing;
-    private float light;
-    private int touch;
 }
