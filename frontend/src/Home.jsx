@@ -31,61 +31,69 @@ const Home = () => {
   };
 
   // 1. 웹소켓 연결 및 구독 로직
-  useEffect(() => {
-    console.log("웹소켓 초기화 시도...");
+useEffect(() => {
+  console.log("웹소켓 초기화 시도...");
 
-    const subscribeAll = () => {
-      console.log("웹소켓 연결 성공: 모든 토픽 구독 시작");
+  socket.onConnect = () => {
+    console.log("웹소켓 연결 성공");
 
-      // 📍 [추가] 실시간 위치 정보 수신
-      socket.subscribe("/topic/location/1/2", (message) => {
-        try {
-          const data = JSON.parse(message.body);
-          console.log("실시간 위치 수신:", data);
-          // 서버에서 { "floor": 2 } 와 같은 형태로 온다고 가정
-          if (data.floor) {
-            setCurrentFloor(data.floor);
-          }
-        } catch (e) {
-          console.error("위치 데이터 파싱 오류:", e);
+    socket.subscribe("/topic/location/1/2", (message) => {
+      console.log("location:", message.body);
+
+      try {
+        const data = JSON.parse(message.body);
+
+        if (data.floor) {
+          setCurrentFloor(data.floor);
         }
-      });
+      } catch (e) {
+        console.error(e);
+      }
+    });
 
-      // 📍 위치 이탈 알림
-      socket.subscribe("/topic/leave/1/2", (message) => {
-        try {
-          console.log("이탈 감지 수신");
-          triggerAlert("leave");
-        } catch (e) { console.error(e); }
-      });
+    socket.subscribe("/topic/leave/1/2", (message) => {
+      console.log("leave:", message.body);
 
-      // 🛡️ 착용 해제 알림
-      socket.subscribe("/topic/wearing/1/2", (message) => {
-        try {
-          const data = JSON.parse(message.body);
-          if (data.wearing === false) triggerAlert("wearing");
-        } catch (e) { console.error(e); }
-      });
+      try {
+        triggerAlert("leave");
+      } catch (e) {
+        console.error(e);
+      }
+    });
 
-      // 🚨 SOS 알림
-      socket.subscribe("/topic/sos/1/2", (message) => {
-        try {
-          const data = JSON.parse(message.body);
-          triggerAlert("sos", data.sosId);
-        } catch (e) { console.error(e); }
-      });
-    };
+    socket.subscribe("/topic/wearing/1/2", (message) => {
+      console.log("wearing:", message.body);
 
-    if (socket.connected) {
-      subscribeAll();
-    } else {
-      socket.onConnect = subscribeAll;
-    }
+      try {
+        const data = JSON.parse(message.body);
 
-    socket.activate();
-    return () => socket.deactivate();
-  }, []);
+        if (data.wearing === false) {
+          triggerAlert("wearing");
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    });
 
+    socket.subscribe("/topic/sos/1/2", (message) => {
+      console.log("sos:", message.body);
+
+      try {
+        const data = JSON.parse(message.body);
+
+        triggerAlert("sos", data.sosId);
+      } catch (e) {
+        console.error(e);
+      }
+    });
+  };
+
+  socket.activate();
+
+  return () => {
+    socket.deactivate();
+  };
+}, []);
   // 2. 알림음 설정 및 제어
   useEffect(() => {
     audioRef.current = new Audio("/alram.mp3");
