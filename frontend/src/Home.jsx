@@ -51,7 +51,7 @@ const Home = () => {
       });
 
       // 🚨 SOS 알림
-      socket.subscribe("/topic/sos/1/1", (message) => {
+      socket.subscribe("/topic/sos/1", (message) => {
         try {
           const data = JSON.parse(message.body);
           console.log("SOS 수신 데이터:", data);
