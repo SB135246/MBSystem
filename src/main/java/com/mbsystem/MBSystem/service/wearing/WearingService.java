@@ -31,7 +31,7 @@ public class WearingService {
     // 조도 임계값: 50 lx 이하일 때 착용으로 간주
     private static final float LUX_THRESHOLD = 50.0f;
     // 터치 임계값: ESP32 analogRead(0-4095) 기준
-    private static final int TOUCH_THRESHOLD = 500;
+    private static final int TOUCH_THRESHOLD = 1000;
 
     @Transactional
     public void processWearingData(SensorDataRequest request) {
