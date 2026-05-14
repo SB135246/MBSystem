@@ -26,11 +26,11 @@ public class Sos {
     @Column(name = "sos_at", nullable = false)
     private Instant sosAt;
 
-    @Column(name = "x_cordinate")
-    private Double xCordinate;
+    @Column(name = "x_coordinate")
+    private Double xCoordinate;
 
-    @Column(name = "y_cordinate")
-    private Double yCordinate;
+    @Column(name = "y_coordinate")
+    private Double yCoordinate;
 
     @NotNull
     @Column(name = "is_confirmed", nullable = false)
