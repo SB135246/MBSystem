@@ -47,6 +47,18 @@ public class LocationService {
         })
         .collect(Collectors.toList());
 
+    Long majorityFloor = scanRequests.stream()
+        .limit(3)
+        .collect(Collectors.groupingBy(
+            RssiScanRequest::getFloor,
+            Collectors.counting()
+        ))
+        .entrySet()
+        .stream()
+        .max(java.util.Map.Entry.comparingByValue())
+        .orElseThrow(() -> new RuntimeException("층 정보 없음"))
+        .getKey();
+
     // 2. 삼변측량 계산 수행
     double[] location = trilateration(points.get(0), points.get(1), points.get(2));
 
@@ -54,7 +66,8 @@ public class LocationService {
             moduleNum,
             placeId,
             location[0],
-            location[1]
+            location[1],
+            majorityFloor
     );
 
     messagingTemplate.convertAndSend(
