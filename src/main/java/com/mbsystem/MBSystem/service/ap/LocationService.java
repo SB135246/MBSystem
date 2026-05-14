@@ -26,6 +26,7 @@ public class LocationService {
    * ESP32로부터 받은 TOP 3 RSSI 데이터를 통해 사용자 위치 계산
    */
   public double[] calculateUserLocation(List<RssiScanRequest> scanRequests) {
+
     if (scanRequests.size() < 3) {
       throw new IllegalArgumentException("삼변측량을 위해 최소 3개의 AP 데이터가 필요합니다.");
     }
@@ -33,47 +34,88 @@ public class LocationService {
     Long moduleNum = scanRequests.get(0).getModuleNum();
     Long placeId = scanRequests.get(0).getPlaceId();
 
-    // 1. DB에서 AP 좌표 정보 매핑 및 거리 변환
-    // 상위 3개만 사용한다고 가정 (리스트가 이미 정렬되어 왔거나, 여기서 정렬 수행)
-    List<double[]> points = scanRequests.stream()
+    // AP 정보 미리 조회
+    List<Ap> topApList = scanRequests.stream()
         .limit(3)
-        .map(request -> {
-          Ap ap = apRepository.findBySsidAndPlaceId(request.getSsid(), request.getPlaceId())
-              .orElseThrow(() -> new RuntimeException("등록되지 않은 AP: " + request.getSsid()));
+        .map(request ->
+            apRepository.findBySsidAndPlaceId(
+                request.getSsid(),
+                request.getPlaceId()
+            ).orElseThrow(() ->
+                new RuntimeException(
+                    "등록되지 않은 AP: " + request.getSsid()
+                )
+            )
+        )
+        .collect(Collectors.toList());
 
-          double distance = rssiToDistance(request.getRssi());
-          // {x, y, distance} 형태로 반환
-          return new double[]{ap.getXCoordinate(), ap.getYCoordinate(), distance};
+    // =========================
+    // 좌표 + 거리 계산
+    // =========================
+
+    List<double[]> points = java.util.stream.IntStream
+        .range(0, topApList.size())
+        .mapToObj(i -> {
+
+          Ap ap = topApList.get(i);
+
+          RssiScanRequest request = scanRequests.get(i);
+
+          double distance =
+              rssiToDistance(request.getRssi());
+
+          return new double[]{
+              ap.getXCoordinate(),
+              ap.getYCoordinate(),
+              distance
+          };
         })
         .collect(Collectors.toList());
 
-    Long majorityFloor = scanRequests.stream()
-        .limit(3)
+    // =========================
+    // floor 과반수 계산
+    // =========================
+
+    Long majorityFloor = topApList.stream()
         .collect(Collectors.groupingBy(
-            RssiScanRequest::getFloor,
+            Ap::getFloor,
             Collectors.counting()
         ))
         .entrySet()
         .stream()
         .max(java.util.Map.Entry.comparingByValue())
-        .orElseThrow(() -> new RuntimeException("층 정보 없음"))
+        .orElseThrow(() ->
+            new RuntimeException("층 정보 없음")
+        )
         .getKey();
 
-    // 2. 삼변측량 계산 수행
-    double[] location = trilateration(points.get(0), points.get(1), points.get(2));
+    // =========================
+    // 삼변측량
+    // =========================
 
-    LocationResponse response = new LocationResponse(
+    double[] location = trilateration(
+        points.get(0),
+        points.get(1),
+        points.get(2)
+    );
+
+    LocationResponse response =
+        new LocationResponse(
             moduleNum,
             placeId,
             location[0],
             location[1],
             majorityFloor
-    );
+        );
 
     messagingTemplate.convertAndSend(
-        "/topic/location/" + placeId + "/" + moduleNum,
+        "/topic/location/" +
+            placeId +
+            "/" +
+            moduleNum,
         response
     );
+
     return location;
   }
 
