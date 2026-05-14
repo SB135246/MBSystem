@@ -59,7 +59,7 @@ const Home = () => {
       console.log("웹소켓 연결 성공");
 
       // 📍 위치 이탈 알림
-      socket.subscribe("/topic/leave/1", (message) => {
+      socket.subscribe("/topic/leave/1/1", (message) => {
         console.log("웹소켓 이탈 알림:", message.body);
 
         setAlertOpen(true);
@@ -70,7 +70,7 @@ const Home = () => {
       });
 
       // 🛡️ 착용 해제 알림
-      socket.subscribe("/topic/wearing/1", (message) => {
+      socket.subscribe("/topic/wearing/1/1", (message) => {
         const data = JSON.parse(message.body);
 
         console.log("착용 상태:", data);
@@ -86,7 +86,7 @@ const Home = () => {
       });
 
       // 🚨 SOS 알림
-      socket.subscribe("/topic/sos/1", (message) => {
+      socket.subscribe("/topic/sos/1/1", (message) => {
         const data = JSON.parse(message.body);
 
         console.log("SOS 수신:", data);
@@ -116,8 +116,8 @@ const Home = () => {
       socket.deactivate();
     };
   }, []);
-  // 테스트 모드
-  // "leave" | "wearing" | "sos"
+
+
   const TEST_MODE = "sos";
 
   useEffect(() => {
@@ -129,7 +129,7 @@ const Home = () => {
         if (TEST_MODE === "leave") {
           testData = {
             module_num: 1,
-            place_id: 1,
+            place_id: 1,  
             btn: 0,
             btn_press_3s: 0,
             light: 0,
