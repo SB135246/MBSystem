@@ -83,11 +83,11 @@ public class SosService {
     }
 
     private double[] calculatePosition(SensorDataRequest request) {
-        if (request.getWifi() == null || request.getWifi().size() < 3) {
-            return new double[0];
-        }
+        if (request.getWifi() == null) return new double[0];
+
         try {
             List<RssiScanRequest> rssiList = request.getWifi().stream()
+                    .filter(w -> w.getSsid() != null && w.getSsid().startsWith("AP"))
                     .map(w -> {
                         RssiScanRequest r = new RssiScanRequest();
                         r.setSsid(w.getSsid());
@@ -98,8 +98,11 @@ public class SosService {
                     })
                     .sorted((a, b) -> Double.compare(b.getRssi(), a.getRssi()))
                     .toList();
+
+            if (rssiList.size() < 3) return new double[0];
             return locationService.calculateUserLocation(rssiList);
         } catch (Exception e) {
+            log.warn("[SOS] 위치 계산 실패: {}", e.getMessage());
             return new double[0];
         }
     }

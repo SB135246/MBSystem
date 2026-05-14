@@ -40,7 +40,7 @@ public class DataApiController {
             List<RssiScanRequest> rssiList = request.getWifi().stream()
                     .filter(w -> w.getSsid() != null && w.getSsid().startsWith("AP"))
                     .sorted(Comparator.comparingInt(SensorDataRequest.WifiInfo::getRssi).reversed())
-                    .limit(3)
+                    .limit(6)
                     .map(w -> {
                         RssiScanRequest dto = new RssiScanRequest();
                         dto.setModuleNum((long) request.getModule_num());
@@ -61,7 +61,11 @@ public class DataApiController {
             }
         }
 
-        sosService.processSosData(request);
+        try {
+            sosService.processSosData(request);
+        } catch (Exception e) {
+            log.warn("[SOS] SOS 처리 실패: {}", e.getMessage());
+        }
         leaveService.checkDeparture(request);
         wearingService.processWearingData(request);
 
