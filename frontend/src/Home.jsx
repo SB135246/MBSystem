@@ -20,76 +20,57 @@ const Home = () => {
 
   // 1. 웹소켓 연결 및 구독 로직
   useEffect(() => {
-    console.log("웹소켓 초기화 시도...");
+  const subscribeAll = () => {
+    console.log("구독 시작...");
 
-    const subscribeAll = () => {
-      console.log("웹소켓 연결 성공: 구독을 시작합니다.");
+    // 공통 처리 함수를 만들면 관리가 쉽습니다.
+    const triggerAlert = (type, data = null) => {
+      console.log(`${type} 알림 발생!`, data);
+      setAlertType(type);
+      setAlertOpen(true);
+      setStatus("alert");
+      setAlertCount((prev) => prev + 1);
+      if (data?.sosId) setCurrentSosId(data.sosId);
+    };
 
-      // 📍 위치 이탈 알림
-      socket.subscribe("/topic/leave/1/2", (message) => {
-        if (message.body) {
-          console.log("이탈 감지 수신:", message.body);
-          setAlertOpen(true);
-          setStatus("alert");
-          setAlertType("leave");
-          setAlertCount((prev) => prev + 1);
+    // 1. 위치 이탈
+    socket.subscribe("/topic/leave/1/2", (message) => {
+      console.log("이탈 데이터 원본:", message.body);
+      triggerAlert("leave");
+    });
+
+    // 2. 착용 해제
+    socket.subscribe("/topic/wearing/1/2", (message) => {
+      try {
+        const data = JSON.parse(message.body);
+        console.log("착용 데이터:", data);
+        // data.wearing이 false일 때만 알림
+        if (data.wearing === false) {
+          triggerAlert("wearing");
         }
-      });
+      } catch (e) { console.error("착용 파싱 에러", e); }
+    });
 
-      // 🛡️ 착용 해제 알림
-      socket.subscribe("/topic/wearing/1/2", (message) => {
-        try {
-          const data = JSON.parse(message.body);
-          console.log("착용 상태 수신:", data);
-          if (!data.wearing) {
-            setAlertOpen(true);
-            setStatus("alert");
-            setAlertType("wearing");
-            setAlertCount((prev) => prev + 1);
-          }
-        } catch (e) {
-          console.error("착용 데이터 파싱 오류:", e);
-        }
-      });
+    // 3. SOS
+    socket.subscribe("/topic/sos/1/2", (message) => {
+      try {
+        const data = JSON.parse(message.body);
+        console.log("SOS 데이터:", data);
+        triggerAlert("sos", data);
+      } catch (e) { console.error("SOS 파싱 에러", e); }
+    });
+  };
 
-      // 🚨 SOS 알림
-      socket.subscribe("/topic/sos/1/2", (message) => {
-        try {
-          const data = JSON.parse(message.body);
-          console.log("SOS 신호 수신:", data);
-          setCurrentSosId(data.sosId);
-          setAlertOpen(true);
-          setStatus("alert");
-          setAlertType("sos");
-          setAlertCount((prev) => prev + 1);
-        } catch (e) {
-          console.error("SOS 데이터 파싱 오류:", e);
-        }
-      });
-    };
+  // STOMP 설정
+  socket.onConnect = (frame) => {
+    console.log("연결됨: " + frame);
+    subscribeAll();
+  };
 
-    // 이미 연결되어 있다면 즉시 구독, 아니면 onConnect에 등록
-    if (socket.connected) {
-      subscribeAll();
-    } else {
-      socket.onConnect = subscribeAll;
-    }
+  socket.activate();
 
-    socket.onStompError = (frame) => {
-      console.error("STOMP 에러:", frame.headers['message']);
-    };
-    
-    socket.onWebSocketError = (event) => {
-      console.error("웹소켓 에러:", event);
-    };
-
-    socket.activate();
-
-    return () => {
-      console.log("홈 컴포넌트 언마운트: 웹소켓 비활성화");
-      socket.deactivate();
-    };
-  }, []);
+  return () => socket.deactivate();
+}, []);
 
   // 2. 알림음 초기 설정
   useEffect(() => {
