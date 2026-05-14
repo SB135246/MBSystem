@@ -18,19 +18,21 @@ const Home = () => {
   const audioRef = useRef(null);
   const API_URL = import.meta.env.VITE_API_URL;
 
-  // 1. 웹소켓 연결 및 구독 (HTTP Polling 로직 제거됨)
+  // 1. 웹소켓 연결 및 구독 로직
   useEffect(() => {
-    socket.onConnect = () => {
+    console.log("웹소켓 초기화 시도...");
+
+    const subscribeAll = () => {
+      console.log("웹소켓 연결 성공: 구독을 시작합니다.");
+
       // 📍 위치 이탈 알림
       socket.subscribe("/topic/leave/1/1", (message) => {
         if (message.body) {
-          console.log("이탈 감지 데이터:", message.body);
+          console.log("이탈 감지 수신:", message.body);
           setAlertOpen(true);
           setStatus("alert");
           setAlertType("leave");
           setAlertCount((prev) => prev + 1);
-        } else {
-          console.error("오류: 이탈 데이터 없음");
         }
       });
 
@@ -38,7 +40,7 @@ const Home = () => {
       socket.subscribe("/topic/wearing/1/1", (message) => {
         try {
           const data = JSON.parse(message.body);
-          console.log("착용 상태 데이터:", data);
+          console.log("착용 상태 수신:", data);
           if (!data.wearing) {
             setAlertOpen(true);
             setStatus("alert");
@@ -46,7 +48,7 @@ const Home = () => {
             setAlertCount((prev) => prev + 1);
           }
         } catch (e) {
-          console.error("오류: 착용 데이터 파싱 실패");
+          console.error("착용 데이터 파싱 오류:", e);
         }
       });
 
@@ -54,23 +56,39 @@ const Home = () => {
       socket.subscribe("/topic/sos/1", (message) => {
         try {
           const data = JSON.parse(message.body);
-          console.log("SOS 수신 데이터:", data);
+          console.log("SOS 신호 수신:", data);
           setCurrentSosId(data.sosId);
           setAlertOpen(true);
           setStatus("alert");
           setAlertType("sos");
           setAlertCount((prev) => prev + 1);
         } catch (e) {
-          console.error("오류: SOS 데이터 파싱 실패");
+          console.error("SOS 데이터 파싱 오류:", e);
         }
       });
     };
 
-    socket.onStompError = () => console.error("오류: STOMP 에러");
-    socket.onWebSocketError = () => console.error("오류: 웹소켓 에러");
+    // 이미 연결되어 있다면 즉시 구독, 아니면 onConnect에 등록
+    if (socket.connected) {
+      subscribeAll();
+    } else {
+      socket.onConnect = subscribeAll;
+    }
+
+    socket.onStompError = (frame) => {
+      console.error("STOMP 에러:", frame.headers['message']);
+    };
+    
+    socket.onWebSocketError = (event) => {
+      console.error("웹소켓 에러:", event);
+    };
 
     socket.activate();
-    return () => socket.deactivate();
+
+    return () => {
+      console.log("홈 컴포넌트 언마운트: 웹소켓 비활성화");
+      socket.deactivate();
+    };
   }, []);
 
   // 2. 알림음 초기 설정
@@ -78,35 +96,40 @@ const Home = () => {
     audioRef.current = new Audio("/alram.mp3");
     audioRef.current.loop = true;
     return () => {
-      if (audioRef.current) audioRef.current.pause();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current = null;
+      }
     };
   }, []);
 
-  // 3. 상태 변화에 따른 알림음 제어
+  // 3. 알림 상태에 따른 소리 제어
   useEffect(() => {
     if (alertOpen) {
-      audioRef.current?.play().catch(() => {});
+      audioRef.current?.play().catch((err) => console.log("오디오 재생 실패:", err));
     } else {
       audioRef.current?.pause();
       if (audioRef.current) audioRef.current.currentTime = 0;
     }
   }, [alertOpen]);
 
-  // 4. 알림 확인 처리 (Confirm)
+  // 4. 알림 확인 처리
   const handleAlertConfirm = async () => {
     try {
       if (alertType === "sos" && currentSosId) {
         const response = await fetch(`${API_URL}/sos/confirm/${currentSosId}`, {
           method: "POST",
         });
-        if (!response.ok) throw new Error();
-        console.log("SOS 확인 성공");
+        if (!response.ok) throw new Error("서버 응답 오류");
+        console.log("SOS 확인 요청 완료");
       }
-
       setAlertOpen(false);
       setStatus("safe");
     } catch (error) {
-      console.error("오류: 확인 처리 실패");
+      console.error("확인 처리 실패:", error);
+      // 서버 통신 실패해도 우선 UI는 닫을 수 있게 처리
+      setAlertOpen(false);
+      setStatus("safe");
     }
   };
 
@@ -133,7 +156,6 @@ const Home = () => {
 
         {/* Main Content */}
         <main className="flex-1 p-3 sm:p-4 space-y-4">
-          {/* 안전/위험 상태 섹션 */}
           <section
             className={`rounded-xl border shadow-sm overflow-hidden transition-all duration-500 ${
               status === "alert" ? "bg-red-50 border-red-200" : "bg-green-50 border-green-100"
@@ -160,13 +182,11 @@ const Home = () => {
             </div>
           </section>
 
-          {/* 업데이트 시간 */}
           <div className="py-1 flex justify-center items-center text-[clamp(0.75rem,3vw,0.9rem)] text-[#868E96]">
             <Clock size={16} className="mr-1" />
             마지막 업데이트 : 방금전
           </div>
 
-          {/* 현재 위치 */}
           <section className="bg-white rounded-xl p-4 border border-[#E9ECEF] shadow-sm">
             <h2 className="text-[#495057] font-bold text-sm">현재 위치</h2>
             <div className="flex justify-center py-3">
@@ -174,7 +194,6 @@ const Home = () => {
             </div>
           </section>
 
-          {/* 지도 구조도 */}
           <section className="bg-white rounded-xl p-4 border border-[#E9ECEF] shadow-sm">
             <div className="flex justify-between items-center mb-3">
               <h2 className="text-[#343A40] font-bold text-sm">IT관 내부 구조도</h2>
@@ -193,7 +212,6 @@ const Home = () => {
             </div>
           </section>
 
-          {/* RSSI 신호 상태 */}
           <section className="bg-white rounded-xl p-4 border border-[#E9ECEF] shadow-sm">
             <div className="flex items-center text-[#0062FF] font-bold mb-3">
               <Wifi size={18} className="mr-2" />
@@ -249,11 +267,11 @@ const Home = () => {
               }`}
             >
               {alertType === "leave" ? (
-                <MapPin size={28} className="text-orange-500 animate-location" />
+                <MapPin size={28} className="text-orange-500" />
               ) : alertType === "wearing" ? (
-                <ShieldAlert size={28} className="text-purple-500 animate-wearing" />
+                <ShieldAlert size={28} className="text-purple-500" />
               ) : (
-                <Bell size={28} className="text-red-500 animate-bell" />
+                <Bell size={28} className="text-red-500" />
               )}
             </div>
             <p
