@@ -26,12 +26,10 @@ public class Sos {
     @Column(name = "sos_at", nullable = false)
     private Instant sosAt;
 
-    @NotNull
-    @Column(name = "x_cordinate", nullable = false)
+    @Column(name = "x_cordinate")
     private Double xCordinate;
 
-    @NotNull
-    @Column(name = "y_cordinate", nullable = false)
+    @Column(name = "y_cordinate")
     private Double yCordinate;
 
     @NotNull
