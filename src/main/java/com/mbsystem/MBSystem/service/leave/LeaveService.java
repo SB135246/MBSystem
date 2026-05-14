@@ -54,9 +54,13 @@ public class LeaveService {
                 .map(Ap::getSsid)
                 .collect(Collectors.toSet());
 
-        // 수신된 WiFi 중 장소 AP와 일치하는 SSID가 하나라도 있는지 확인
-        boolean isInPlace = request.getWifi() != null && request.getWifi().stream()
-                .anyMatch(w -> w.getSsid() != null && placeApSsids.contains(w.getSsid()));
+        // 수신된 WiFi 중 장소 AP와 일치하는 SSID의 개수 확인 (최소 2개 이상 잡혀야 구역 내로 간주)
+        long matchingApCount = request.getWifi() == null ? 0 : request.getWifi().stream()
+                .filter(w -> w.getSsid() != null && placeApSsids.contains(w.getSsid()))
+                .count();
+
+        // 지정된 AP가 1개 이하(0개 또는 1개)면 이탈(false)로 간주
+        boolean isInPlace = matchingApCount >= 2;
 
         // --- 실시간 상태 전송 (Wearing 기능과 동일한 방식) ---
         com.mbsystem.MBSystem.dto.LeaveStatusMessage statusMessage = new com.mbsystem.MBSystem.dto.LeaveStatusMessage(
@@ -68,12 +72,14 @@ public class LeaveService {
         messagingTemplate.convertAndSend("/topic/leave/" + placeId + "/" + moduleNum, statusMessage);
 
         if (isInPlace) {
-            log.info("[이탈감지] 모듈 {} 구역 내 정상 위치 확인 (isInPlace: true)", moduleNum);
+            log.info("[이탈감지] 모듈 {} 구역 내 정상 위치 확인 (매칭 AP: {}개, isInPlace: true)", moduleNum, matchingApCount);
             // 구역 내에 있으면 이탈 관련 상태 초기화
             departureStartTimes.remove(moduleId);
             isAlertSentMap.remove(moduleId);
             return;
         }
+
+        log.warn("[이탈감지] 모듈 {} 이탈 가능성 감지 (매칭 AP: {}개, isInPlace: false)", moduleNum, matchingApCount);
 
         // --- 이탈 상태일 때 (지정된 AP가 없음) ---
 
