@@ -64,15 +64,12 @@ public class LeaveService {
                 placeId,
                 isInPlace
         );
-        messagingTemplate.convertAndSend("/topic/leave/status/" + placeId + "/" + moduleNum, statusMessage);
+        // 경로를 /topic/leave/{placeId}/{moduleNum} 으로 변경하여 Wearing과 패턴 통일
+        messagingTemplate.convertAndSend("/topic/leave/" + placeId + "/" + moduleNum, statusMessage);
 
         if (isInPlace) {
+            log.info("[이탈감지] 모듈 {} 구역 내 정상 위치 확인 (isInPlace: true)", moduleNum);
             // 구역 내에 있으면 이탈 관련 상태 초기화
-            if (departureStartTimes.containsKey(moduleId)) {
-                log.info("[이탈감지] 모듈 {} 구역 복귀 확인 - 상태 초기화", moduleNum);
-            } else {
-                log.info("[이탈감지] 모듈 {} 구역 내 정상 위치 확인", moduleNum);
-            }
             departureStartTimes.remove(moduleId);
             isAlertSentMap.remove(moduleId);
             return;
