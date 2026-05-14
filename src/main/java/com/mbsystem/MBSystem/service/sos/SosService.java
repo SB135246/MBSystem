@@ -49,8 +49,8 @@ public class SosService {
         Sos sos = new Sos();
         sos.setModule(module);
         sos.setSosAt(Instant.now());
-        sos.setXCordinate(coords.length >= 2 ? coords[0] : null);
-        sos.setYCordinate(coords.length >= 2 ? coords[1] : null);
+        sos.setXCoordinate(coords.length >= 2 ? coords[0] : null);
+        sos.setYCoordinate(coords.length >= 2 ? coords[1] : null);
         sos.setIsConfirmed(false);
         Sos saved = sosRepository.save(sos);
 
@@ -58,8 +58,8 @@ public class SosService {
                 saved.getId(),
                 module.getModuleNum(),
                 module.getPlace().getId(),
-                saved.getXCordinate(),
-                saved.getYCordinate(),
+                saved.getXCoordinate(),
+                saved.getYCoordinate(),
                 saved.getSosAt()
         );
 
