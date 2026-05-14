@@ -8,6 +8,7 @@ import com.mbsystem.MBSystem.service.sos.SosService;
 import com.mbsystem.MBSystem.service.wearing.WearingService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -27,8 +28,12 @@ public class DataApiController {
     private final WearingService wearingService;
 
     @PostMapping("/data")
-    public ResponseEntity<String> receiveSensorData(@RequestBody SensorDataRequest request) {
-        log.info("===== 데이터 수신 시작 =====");
+    public ResponseEntity<String> receiveSensorData(@RequestBody SensorDataRequest request,
+                                                    HttpServletRequest httpRequest) {
+        String clientIp = httpRequest.getHeader("X-Forwarded-For");
+        if (clientIp == null || clientIp.isBlank()) clientIp = httpRequest.getRemoteAddr();
+
+        log.info("===== 데이터 수신 시작 [IP: {}] =====", clientIp);
         log.info("모듈 번호: {}", request.getModule_num());
         log.info("장소 ID: {}", request.getPlace_id());
         log.info("버튼 상태: {}, SOS: {}", request.getBtn(), request.getBtn_press_3s());
