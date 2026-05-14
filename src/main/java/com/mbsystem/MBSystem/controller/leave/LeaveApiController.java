@@ -16,10 +16,12 @@ public class LeaveApiController {
 
     private final LeaveService leaveService;
 
-    @Operation(summary = "최신 이탈 알림 조회", description = "특정 장소에서 발생한 가장 최근의 이탈 알림을 조회합니다. 알림이 없으면 빈 응답을 반환합니다.")
-    @GetMapping("/latest/{placeId}")
-    public ResponseEntity<LeaveAlertMessage> getLatestAlert(@PathVariable Long placeId) {
-        LeaveAlertMessage alert = leaveService.getLastAlert(placeId);
+    @Operation(summary = "최신 이탈 알림 조회", description = "특정 장소와 모듈에서 발생한 가장 최근의 이탈 알림을 조회합니다. 알림이 없으면 빈 응답을 반환합니다.")
+    @GetMapping("/latest/{placeId}/{moduleNum}")
+    public ResponseEntity<LeaveAlertMessage> getLatestAlert(
+            @PathVariable Long placeId,
+            @PathVariable Long moduleNum) {
+        LeaveAlertMessage alert = leaveService.getLastAlert(placeId, moduleNum);
         if (alert == null) {
             return ResponseEntity.noContent().build();
         }
