@@ -26,7 +26,7 @@ const Home = () => {
       console.log("웹소켓 연결 성공: 구독을 시작합니다.");
 
       // 📍 위치 이탈 알림
-      socket.subscribe("/topic/leave/1/1", (message) => {
+      socket.subscribe("/topic/leave/1/2", (message) => {
         if (message.body) {
           console.log("이탈 감지 수신:", message.body);
           setAlertOpen(true);
@@ -37,7 +37,7 @@ const Home = () => {
       });
 
       // 🛡️ 착용 해제 알림
-      socket.subscribe("/topic/wearing/1/1", (message) => {
+      socket.subscribe("/topic/wearing/1/2", (message) => {
         try {
           const data = JSON.parse(message.body);
           console.log("착용 상태 수신:", data);
@@ -53,7 +53,7 @@ const Home = () => {
       });
 
       // 🚨 SOS 알림
-      socket.subscribe("/topic/sos/1", (message) => {
+      socket.subscribe("/topic/sos/1/2", (message) => {
         try {
           const data = JSON.parse(message.body);
           console.log("SOS 신호 수신:", data);
