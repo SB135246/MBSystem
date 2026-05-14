@@ -63,7 +63,7 @@ public class WearingService {
     }
 
     private boolean determineWearingStatus(float light, int touch) {
-        return (light <= LUX_THRESHOLD) || (touch >= TOUCH_THRESHOLD);
+        return (light <= LUX_THRESHOLD) || (touch <= TOUCH_THRESHOLD);
     }
 
     private void saveWearingRecord(SensorDataRequest request) {
