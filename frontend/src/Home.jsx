@@ -62,19 +62,19 @@ const Home = () => {
           }
 
           if (data.x !== undefined && data.y !== undefined) {
+            // 🔥 좌표 보정
+            const correctedX = data.x * 25 + 20;
+            const correctedY = data.y * 20 + 40;
+
+            console.log("보정 좌표:", correctedX, correctedY);
+
             setMarkerPosition({
-              x: data.x,
-              y: data.y,
+              x: correctedX,
+              y: correctedY,
             });
           }
 
-          setLastUpdated(
-            new Date().toLocaleTimeString("ko-KR", {
-              hour: "2-digit",
-              minute: "2-digit",
-              second: "2-digit",
-            }),
-          );
+          setLastUpdated(new Date());
         } catch (e) {
           console.error("위치 데이터 파싱 오류:", e);
         }
@@ -311,6 +311,23 @@ const Home = () => {
       console.error("SOS 확인 실패:", error);
     }
   };
+
+  const getRelativeTime = () => {
+    if (!lastUpdated) return "수신 대기중";
+
+    const diff = Math.floor((Date.now() - lastUpdated.getTime()) / 1000);
+
+    if (diff < 10) return "방금 전";
+    if (diff < 60) return `${diff}초 전`;
+
+    const minutes = Math.floor(diff / 60);
+
+    if (minutes < 60) return `${minutes}분 전`;
+
+    const hours = Math.floor(minutes / 60);
+
+    return `${hours}시간 전`;
+  };
   return (
     <div className="flex flex-col min-h-[100dvh] bg-[#F8F9FA]">
       <div className="w-full max-w-md mx-auto flex flex-col flex-1">
@@ -356,7 +373,7 @@ const Home = () => {
 
           <div className="py-1 flex justify-center items-center text-[clamp(0.75rem,3vw,0.9rem)] text-[#868E96]">
             <Clock size={16} className="mr-1" />
-            마지막 업데이트 : {lastUpdated || "수신 대기중"}
+            마지막 업데이트 : {getRelativeTime()}
           </div>
 
           {/* 현재 위치 섹션 - currentFloor 상태 반영 */}
