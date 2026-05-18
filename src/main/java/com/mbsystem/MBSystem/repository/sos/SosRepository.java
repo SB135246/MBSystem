@@ -9,6 +9,8 @@ import java.util.Optional;
 
 import java.util.List;
 
+import com.mbsystem.MBSystem.domain.QModule;
+
 import static com.mbsystem.MBSystem.domain.QSos.*;
 
 @Repository
@@ -37,6 +39,14 @@ public class SosRepository {
   public List<Sos> findById(Long moduleId){
     return queryFactory.selectFrom(sos)
         .where(sos.module.id.eq(moduleId))
+        .fetch();
+  }
+
+  public List<Sos> findByPlaceId(Long placeId) {
+    return queryFactory.selectFrom(sos)
+        .join(sos.module, QModule.module)
+        .where(QModule.module.place.id.eq(placeId))
+        .orderBy(sos.sosAt.desc())
         .fetch();
   }
 

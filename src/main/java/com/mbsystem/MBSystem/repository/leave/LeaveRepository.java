@@ -9,6 +9,8 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
+import com.mbsystem.MBSystem.domain.QModule;
+
 import static com.mbsystem.MBSystem.domain.QLeave.leave;
 
 @Repository
@@ -31,6 +33,14 @@ public class LeaveRepository {
   public List<Leave> findById(Long moduleId){
     return queryFactory.selectFrom(leave)
         .where(leave.module.id.eq(moduleId))
+        .fetch();
+  }
+
+  public List<Leave> findByPlaceId(Long placeId) {
+    return queryFactory.selectFrom(leave)
+        .join(leave.module, QModule.module)
+        .where(QModule.module.place.id.eq(placeId))
+        .orderBy(leave.leavedAt.desc())
         .fetch();
   }
 

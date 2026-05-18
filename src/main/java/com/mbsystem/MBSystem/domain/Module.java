@@ -1,5 +1,6 @@
 package com.mbsystem.MBSystem.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
@@ -15,6 +16,7 @@ public class Module {
   @Column(name = "module_id", nullable = false)
   private Long id;
 
+  @JsonIgnore
   @NotNull
   @ManyToOne(fetch = FetchType.LAZY, optional = false)
   @JoinColumn(name = "place_id", nullable = false)

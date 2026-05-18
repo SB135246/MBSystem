@@ -3,11 +3,13 @@ package com.mbsystem.MBSystem.service.leave;
 import com.mbsystem.MBSystem.domain.Ap;
 import com.mbsystem.MBSystem.domain.Leave;
 import com.mbsystem.MBSystem.domain.Module;
+import com.mbsystem.MBSystem.dto.AdminAlertMessage;
 import com.mbsystem.MBSystem.dto.LeaveAlertMessage;
 import com.mbsystem.MBSystem.dto.SensorDataRequest;
 import com.mbsystem.MBSystem.repository.ap.ApRepository;
 import com.mbsystem.MBSystem.repository.leave.LeaveRepository;
 import com.mbsystem.MBSystem.repository.module.ModuleRepository;
+import com.mbsystem.MBSystem.service.admin.AdminService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -30,6 +32,7 @@ public class LeaveService {
     private final ModuleRepository moduleRepository;
     private final ApRepository apRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final AdminService adminService;
 
     // 모듈별 처음 이탈이 감지된 시각
     private final Map<Long, Instant> departureStartTimes = new ConcurrentHashMap<>();
@@ -98,6 +101,16 @@ public class LeaveService {
                                 false // inPlace = false (이탈함)
                         );
                         messagingTemplate.convertAndSend("/topic/leave/" + placeId + "/" + moduleNum, alert);
+
+                        adminService.broadcastToAdmin(new AdminAlertMessage(
+                                "LEAVE",
+                                saved.getId(),
+                                module.getModuleNum(),
+                                module.getPlace().getId(),
+                                saved.getLeavedAt(),
+                                null,
+                                null
+                        ));
                     }
                 } else {
                     log.info("[이탈감지] 모듈 {} 이탈 유지 중... (현재 {}분 경과)", moduleNum, minutesPassed);
