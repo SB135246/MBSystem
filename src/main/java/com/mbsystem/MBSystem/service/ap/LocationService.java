@@ -118,14 +118,14 @@ public class LocationService {
 
   private double rssiToRadius(double rssi) {
 
-    if (rssi >= -45) return 1.0;
-    if (rssi >= -55) return 2.0;
-    if (rssi >= -65) return 4.0;
-    if (rssi >= -75) return 6.0;
+    if (rssi >= -50) return 1.0;
+    if (rssi >= -57) return 2.0;
+    if (rssi >= -64) return 3.0;
+    if (rssi >= -70) return 4.0;
 
-    return 8.0;
+    return 6.0;
   }
-  
+
   /**
    * RSSI를 거리(m)로 변환하는 공식 (Log-Distance Path Loss Model)
    */
