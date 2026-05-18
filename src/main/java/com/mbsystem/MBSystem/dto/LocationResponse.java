@@ -16,4 +16,5 @@ public class LocationResponse {
   private double y;
 
   private double floor;
+  private double radius;
 }

@@ -19,111 +19,126 @@ public class LocationService {
   private final SimpMessagingTemplate messagingTemplate;
 
   // 환경 변수 (현장 테스트 후 조정 필요)
-  private static final double TX_POWER_1M = -40.0; // 1m 거리에서의 평균 RSSI
-  private static final double N_CONSTANT = 2.5;    // 경로 손실 지수 (실내 보통 2.5 ~ 3.5)
+  private static final double TX_POWER_1M = -45.0; // 1m 거리에서의 평균 RSSI
+  private static final double N_CONSTANT = 3.2;    // 경로 손실 지수 (실내 보통 2.5 ~ 3.5)
 
   /**
    * ESP32로부터 받은 TOP 3 RSSI 데이터를 통해 사용자 위치 계산
    */
-  public double[] calculateUserLocation(List<RssiScanRequest> scanRequests) {
+  public double[] calculateUserLocation(
+      List<RssiScanRequest> scanRequests
+  ) {
 
-    if (scanRequests.size() < 3) {
-      throw new IllegalArgumentException("삼변측량을 위해 최소 3개의 AP 데이터가 필요합니다.");
+    if (scanRequests.isEmpty()) {
+      throw new IllegalArgumentException(
+          "AP 데이터가 없습니다."
+      );
     }
 
-    Long moduleNum = scanRequests.get(0).getModuleNum();
-    Long placeId = scanRequests.get(0).getPlaceId();
+    Long moduleNum =
+        scanRequests.get(0).getModuleNum();
 
-    // AP 정보 미리 조회
-    List<Ap> topApList = scanRequests.stream()
-        .limit(3)
-        .map(request ->
-            apRepository.findBySsidAndPlaceId(
-                request.getSsid(),
-                request.getPlaceId()
-            ).orElseThrow(() ->
-                new RuntimeException(
-                    "등록되지 않은 AP: " + request.getSsid()
+    Long placeId =
+        scanRequests.get(0).getPlaceId();
+
+    // =========================
+    // strongest RSSI AP 선택
+    // =========================
+
+    RssiScanRequest strongestRequest =
+        scanRequests.stream()
+            .max((a, b) ->
+                Double.compare(
+                    a.getRssi(),
+                    b.getRssi()
                 )
             )
-        )
-        .collect(Collectors.toList());
+            .orElseThrow();
 
     // =========================
-    // 좌표 + 거리 계산
+    // AP 조회
     // =========================
 
-    List<double[]> points = java.util.stream.IntStream
-        .range(0, topApList.size())
-        .mapToObj(i -> {
-
-          Ap ap = topApList.get(i);
-
-          RssiScanRequest request = scanRequests.get(i);
-
-          double distance =
-              rssiToDistance(request.getRssi());
-
-          return new double[]{
-              ap.getXCoordinate(),
-              ap.getYCoordinate(),
-              distance
-          };
-        })
-        .collect(Collectors.toList());
+    Ap strongestAp =
+        apRepository.findBySsidAndPlaceId(
+            strongestRequest.getSsid(),
+            strongestRequest.getPlaceId()
+        ).orElseThrow(() ->
+            new RuntimeException(
+                "등록되지 않은 AP"
+            )
+        );
 
     // =========================
-    // floor 과반수 계산
+    // 위치 = strongest AP 좌표
     // =========================
 
-    Long majorityFloor = topApList.stream()
-        .collect(Collectors.groupingBy(
-            Ap::getFloor,
-            Collectors.counting()
-        ))
-        .entrySet()
-        .stream()
-        .max(java.util.Map.Entry.comparingByValue())
-        .orElseThrow(() ->
-            new RuntimeException("층 정보 없음")
-        )
-        .getKey();
+    double userX =
+        strongestAp.getXCoordinate();
+
+    double userY =
+        strongestAp.getYCoordinate();
 
     // =========================
-    // 삼변측량
+    // radius 계산
     // =========================
 
-    double[] location = trilateration(
-        points.get(0),
-        points.get(1),
-        points.get(2)
-    );
+    double radius =
+        rssiToRadius(
+            strongestRequest.getRssi()
+        );
+
+    // =========================
+    // 응답
+    // =========================
 
     LocationResponse response =
         new LocationResponse(
             moduleNum,
             placeId,
-            location[0],
-            location[1],
-            majorityFloor
+            userX,
+            userY,
+            strongestAp.getFloor(),
+            radius
         );
 
     messagingTemplate.convertAndSend(
-        "/topic/location/" +
-            placeId +
-            "/" +
-            moduleNum,
+        "/topic/location/"
+            + placeId
+            + "/"
+            + moduleNum,
         response
     );
 
-    return location;
+    return new double[]{
+        userX,
+        userY
+    };
+  }
+
+  private double rssiToRadius(double rssi) {
+
+    if (rssi >= -50) return 1.0;
+    if (rssi >= -57) return 2.0;
+    if (rssi >= -64) return 3.0;
+    if (rssi >= -70) return 4.0;
+
+    return 6.0;
   }
 
   /**
    * RSSI를 거리(m)로 변환하는 공식 (Log-Distance Path Loss Model)
    */
   private double rssiToDistance(double rssi) {
-    return Math.pow(10, (TX_POWER_1M - rssi) / (10 * N_CONSTANT));
+    double distance =
+        Math.pow(
+            10,
+            (TX_POWER_1M - rssi)
+                / (10 * N_CONSTANT)
+        );
+
+    // 최대 거리 제한
+    return Math.min(distance, 12.0);
   }
 
   /**
