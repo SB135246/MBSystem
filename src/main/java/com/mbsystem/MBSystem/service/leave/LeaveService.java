@@ -36,7 +36,7 @@ public class LeaveService {
     // 모듈별 알림 전송 여부 (이탈 중일 때 중복 알림 방지)
     private final Map<Long, Boolean> isAlertSentMap = new ConcurrentHashMap<>();
 
-    private static final long LEAVE_DELAY_MINUTES = 5;
+    private static final long LEAVE_DELAY_MINUTES = 3;
 
     @Transactional
     public void checkDeparture(SensorDataRequest request) {
@@ -59,29 +59,29 @@ public class LeaveService {
                 .filter(w -> w.getSsid() != null && placeApSsids.contains(w.getSsid()))
                 .count();
 
-        // 1차 판단: 현재 AP가 2개 이상 잡히는가?
-        boolean isNowInPlace = matchingApCount >= 2;
+        // 1차 판단: 현재 지정된 AP가 1개라도 잡히는가? (0개일 때만 이탈로 간주)
+        boolean isNowInPlace = matchingApCount >= 1;
 
         if (isNowInPlace) {
             // --- 구역 내 정상 위치 ---
             if (departureStartTimes.containsKey(moduleId)) {
-                log.info("[이탈감지] 모듈 {} 구역 복귀 확인 - 상태 초기화", moduleNum);
+                log.info("[이탈감지] 모듈 {} 구역 복귀 확인 - 상태 초기화 (지정 AP {}개 감지)", moduleNum, matchingApCount);
             }
             departureStartTimes.remove(moduleId);
             isAlertSentMap.remove(moduleId);
         } else {
-            // --- 이탈 가능성 감지 (AP 1개 이하) ---
+            // --- 이탈 가능성 감지 (지정 AP 0개) ---
             Instant firstDetected = departureStartTimes.putIfAbsent(moduleId, Instant.now());
             
             if (firstDetected == null) {
-                log.info("[이탈감지] 모듈 {} 이탈 처음 감지 - 5분 대기 시작", moduleNum);
+                log.info("[이탈감지] 모듈 {} 이탈 처음 감지 - 3분 대기 시작", moduleNum);
             } else {
                 long minutesPassed = java.time.Duration.between(firstDetected, Instant.now()).toMinutes();
                 
                 if (minutesPassed >= LEAVE_DELAY_MINUTES) {
-                    // --- 5분 경과: 확정적 이탈 ---
+                    // --- 3분 경과: 확정적 이탈 ---
                     if (!isAlertSentMap.getOrDefault(moduleId, false)) {
-                        log.warn("[이탈감지] 모듈 {} 5분 이상 이탈 확정 - 알림 및 DB 저장", moduleNum);
+                        log.warn("[이탈감지] 모듈 {} 3분 이상 이탈 확정 - 알림 및 DB 저장", moduleNum);
                         
                         Leave leave = new Leave();
                         leave.setModule(module);
@@ -89,7 +89,7 @@ public class LeaveService {
                         Leave saved = leaveRepository.save(leave);
                         isAlertSentMap.put(moduleId, true);
 
-                        // 공식 알림 메시지 발송 (5분에 한 번, 이탈 확정 시에만)
+                        // 공식 알림 메시지 발송 (3분에 한 번, 이탈 확정 시에만)
                         LeaveAlertMessage alert = new LeaveAlertMessage(
                                 saved.getId(),
                                 module.getModuleNum(),
