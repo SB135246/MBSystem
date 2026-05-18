@@ -429,10 +429,9 @@ const Home = () => {
                         : "bg-blue-400/25 border-blue-500/40" // 일반 범위(1-4)일 때 파란색 계열
                     }`}
                     style={{
-                      // 가로 60유닛 = 76cqw 이므로, 반지름 1유닛당 약 2.533cqw 지름 확보
-                      // 1~4는 정상 범위, 6은 경고 범위로 시각화
-                      width: `${markerPosition.radius * 2.533}cqw`, 
-                      height: `${markerPosition.radius * 2.533}cqw`,
+                      // 반지름 1단위당 크기를 기존 2.533에서 3.0으로 약간 키움
+                      width: `${markerPosition.radius * 3.0}cqw`, 
+                      height: `${markerPosition.radius * 3.0}cqw`,
                       left: "50%",
                       top: "50%",
                       transform: "translate(-50%, -50%)",
