@@ -25,19 +25,25 @@ const Home = () => {
     3: threeFloor,
   };
 
-  const {
-    alerts,
-    addAlert,
-
-    lastUpdated,
-    setLastUpdated,
+  const [markerPosition, setMarkerPosition] = useState({
+    x: 50, // 📍 퍼센트 기준 가위 중앙
+    y: 60, // 📍 퍼센트 기준 세로 중앙
+    radius: 0,
+    isInitial: true, // 📍 초기 상태 플래그
+  });
 
     markerPosition,
     setMarkerPosition,
 
-    currentFloor,
-    setCurrentFloor,
-  } = useAlert();
+  // 📍 좌표 -> 퍼센트 변환 함수
+  const convertToPercent = (x, y) => {
+    const percentX = 12 + (x / 60) * 76;
+    const adjustedY = y > 10 ? 10 + (y - 10) * 0.5 : y; 
+    const percentY = 78 - (adjustedY / 10) * 36;
+    return { x: percentX, y: percentY };
+  };
+
+  const { alerts, addAlert } = useAlert();
 
   const audioRef = useRef(null);
 
@@ -58,33 +64,19 @@ const Home = () => {
           const data = JSON.parse(message.body);
           console.log("실시간 위치 수신:", data);
 
-          // 서버에서 { "floor": 2 } 와 같은 형태로 온다고 가정
           if (data.floor) {
             setCurrentFloor(data.floor);
           }
 
           if (data.x !== undefined && data.y !== undefined) {
-            // 🔥 좌표 보정
-            const correctedX = data.x * 25 + 20;
-            const correctedY = data.y * 20 + 75;
+            const pos = convertToPercent(data.x, data.y);
+            console.log("보정 퍼센트 좌표:", pos);
 
-            // 비정상 좌표 필터링
-            if (
-              correctedX < 0 ||
-              correctedX > 300 ||
-              correctedY < 0 ||
-              correctedY > 250
-            ) {
-              console.log("비정상 좌표 무시");
-
-              return;
-            }
-
-            // 부드럽게 이동
-            setMarkerPosition((prev) => ({
-              x: prev.x * 0.7 + correctedX * 0.3,
-              y: prev.y * 0.7 + correctedY * 0.3,
-            }));
+            setMarkerPosition({
+              ...pos,
+              radius: data.radius || 0,
+              isInitial: false, // 📍 데이터 수신 시 플래그 해제
+            });
           }
 
           setLastUpdated(new Date());
@@ -415,20 +407,50 @@ const Home = () => {
                 현재 층 : {currentFloor}층
               </div>
             </div>
-            <div className="relative w-full aspect-[2/1] flex items-center justify-center">
+            <div className="relative w-full aspect-[2/1] flex items-center justify-center bg-white overflow-hidden [container-type:inline-size]">
               <img
                 src={floorImages[currentFloor] || oneFloor}
                 alt={`${currentFloor}층 구조도`}
                 className="w-full h-full object-contain"
               />
+              
+              {/* 📍 사용자 현재 위치 및 반경 표시 */}
               <div
-                className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center transition-all duration-500"
+                className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center transition-all duration-500 z-10"
                 style={{
-                  left: `${markerPosition.x}px`,
-                  top: `${markerPosition.y}px`,
+                  left: `${markerPosition.x}%`,
+                  top: `${markerPosition.y}%`,
+                  width: "1px",
+                  height: "1px",
                 }}
               >
-                <MapPin size={24} className="text-[#0062FF] fill-[#0062FF]" />
+                {/* 📍 반경 표시 (반투명 원) - 1~6 수치에 맞게 스케일 조정 */}
+                {!markerPosition.isInitial && markerPosition.radius > 0 && (
+                  <div 
+                    className={`absolute border-2 rounded-full animate-pulse pointer-events-none ${
+                      markerPosition.radius >= 6 
+                        ? "bg-red-400/20 border-red-500/40" // 범위 초과(6)일 때 빨간색 계열
+                        : "bg-blue-400/25 border-blue-500/40" // 일반 범위(1-4)일 때 파란색 계열
+                    }`}
+                    style={{
+                      // 반지름 1단위당 크기를 기존 2.533에서 3.0으로 약간 키움
+                      width: `${markerPosition.radius * 3.0}cqw`, 
+                      height: `${markerPosition.radius * 3.0}cqw`,
+                      left: "50%",
+                      top: "50%",
+                      transform: "translate(-50%, -50%)",
+                    }}
+                  />
+                )}
+
+                <MapPin size={24} className="text-[#0062FF] fill-[#0062FF] relative z-20" />
+                
+                {/* 📍 정확한 중심점 (파란색 채워진 점) */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-[#0062FF] rounded-full border border-white z-30 shadow-sm" />
+
+                <div className="bg-[#0062FF] text-white text-[clamp(0.4rem,1.5vw,0.6rem)] px-1 py-[1px] rounded mt-1 whitespace-nowrap shadow-sm relative z-20">
+                  {markerPosition.isInitial ? "위치 확인 중..." : "내 위치"}
+                </div>
               </div>
             </div>
           </section>
