@@ -74,7 +74,9 @@ public class SosService {
                 saved.getId(),
                 module.getModuleNum(),
                 module.getPlace().getId(),
-                saved.getSosAt()
+                saved.getSosAt(),
+                saved.getXCoordinate(),
+                saved.getYCordinate()
         ));
     }
 

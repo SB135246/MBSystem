@@ -54,7 +54,9 @@ public class WearingService {
                             null,
                             module.getModuleNum(),
                             module.getPlace().getId(),
-                            java.time.Instant.now()
+                            java.time.Instant.now(),
+                            null,
+                            null
                     )));
         }
 

@@ -111,7 +111,9 @@ public class LeaveService {
                                 saved.getId(),
                                 module.getModuleNum(),
                                 module.getPlace().getId(),
-                                saved.getLeavedAt()
+                                saved.getLeavedAt(),
+                                null,
+                                null
                         ));
                     }
                 } else {
