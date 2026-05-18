@@ -3,11 +3,13 @@ package com.mbsystem.MBSystem.service.leave;
 import com.mbsystem.MBSystem.domain.Ap;
 import com.mbsystem.MBSystem.domain.Leave;
 import com.mbsystem.MBSystem.domain.Module;
+import com.mbsystem.MBSystem.dto.AdminAlertMessage;
 import com.mbsystem.MBSystem.dto.LeaveAlertMessage;
 import com.mbsystem.MBSystem.dto.SensorDataRequest;
 import com.mbsystem.MBSystem.repository.ap.ApRepository;
 import com.mbsystem.MBSystem.repository.leave.LeaveRepository;
 import com.mbsystem.MBSystem.repository.module.ModuleRepository;
+import com.mbsystem.MBSystem.service.admin.AdminService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -30,13 +32,14 @@ public class LeaveService {
     private final ModuleRepository moduleRepository;
     private final ApRepository apRepository;
     private final SimpMessagingTemplate messagingTemplate;
+    private final AdminService adminService;
 
     // 모듈별 처음 이탈이 감지된 시각
     private final Map<Long, Instant> departureStartTimes = new ConcurrentHashMap<>();
     // 모듈별 알림 전송 여부 (이탈 중일 때 중복 알림 방지)
     private final Map<Long, Boolean> isAlertSentMap = new ConcurrentHashMap<>();
 
-    private static final long LEAVE_DELAY_MINUTES = 5;
+    private static final long LEAVE_DELAY_MINUTES = 3;
 
     @Transactional
     public void checkDeparture(SensorDataRequest request) {
@@ -59,34 +62,29 @@ public class LeaveService {
                 .filter(w -> w.getSsid() != null && placeApSsids.contains(w.getSsid()))
                 .count();
 
-        // 1차 판단: 현재 AP가 2개 이상 잡히는가?
-        boolean isNowInPlace = matchingApCount >= 2;
-        boolean statusToSend = true; // 프론트에 보낼 상태 (기본값: 정상)
+        // 1차 판단: 현재 지정된 AP가 1개라도 잡히는가? (0개일 때만 이탈로 간주)
+        boolean isNowInPlace = matchingApCount >= 1;
 
         if (isNowInPlace) {
             // --- 구역 내 정상 위치 ---
             if (departureStartTimes.containsKey(moduleId)) {
-                log.info("[이탈감지] 모듈 {} 구역 복귀 확인 - 상태 초기화", moduleNum);
+                log.info("[이탈감지] 모듈 {} 구역 복귀 확인 - 상태 초기화 (지정 AP {}개 감지)", moduleNum, matchingApCount);
             }
             departureStartTimes.remove(moduleId);
             isAlertSentMap.remove(moduleId);
-            statusToSend = true;
         } else {
-            // --- 이탈 가능성 감지 (AP 1개 이하) ---
+            // --- 이탈 가능성 감지 (지정 AP 0개) ---
             Instant firstDetected = departureStartTimes.putIfAbsent(moduleId, Instant.now());
             
             if (firstDetected == null) {
-                log.info("[이탈감지] 모듈 {} 이탈 처음 감지 - 5분 대기 시작 (아직 정상으로 표시)", moduleNum);
-                statusToSend = true; // 처음 감지 시엔 정상으로 보냄
+                log.info("[이탈감지] 모듈 {} 이탈 처음 감지 - 3분 대기 시작", moduleNum);
             } else {
                 long minutesPassed = java.time.Duration.between(firstDetected, Instant.now()).toMinutes();
                 
                 if (minutesPassed >= LEAVE_DELAY_MINUTES) {
-                    // --- 5분 경과: 확정적 이탈 ---
-                    statusToSend = false; // 드디어 이탈(false)로 보냄
-                    
+                    // --- 3분 경과: 확정적 이탈 ---
                     if (!isAlertSentMap.getOrDefault(moduleId, false)) {
-                        log.warn("[이탈감지] 모듈 {} 5분 이상 이탈 확정 - 알림 및 DB 저장", moduleNum);
+                        log.warn("[이탈감지] 모듈 {} 3분 이상 이탈 확정 - 알림 및 DB 저장", moduleNum);
                         
                         Leave leave = new Leave();
                         leave.setModule(module);
@@ -94,28 +92,30 @@ public class LeaveService {
                         Leave saved = leaveRepository.save(leave);
                         isAlertSentMap.put(moduleId, true);
 
-                        // 공식 알림 메시지 발송
+                        // 공식 알림 메시지 발송 (3분에 한 번, 이탈 확정 시에만)
                         LeaveAlertMessage alert = new LeaveAlertMessage(
                                 saved.getId(),
                                 module.getModuleNum(),
                                 module.getPlace().getId(),
-                                saved.getLeavedAt()
+                                saved.getLeavedAt(),
+                                false // inPlace = false (이탈함)
                         );
                         messagingTemplate.convertAndSend("/topic/leave/" + placeId + "/" + moduleNum, alert);
+
+                        adminService.broadcastToAdmin(new AdminAlertMessage(
+                                "LEAVE",
+                                saved.getId(),
+                                module.getModuleNum(),
+                                module.getPlace().getId(),
+                                saved.getLeavedAt(),
+                                null,
+                                null
+                        ));
                     }
                 } else {
-                    log.info("[이탈감지] 모듈 {} 이탈 유지 중... (현재 {}분 경과, 아직 정상으로 표시)", moduleNum, minutesPassed);
-                    statusToSend = true; // 5분 전까지는 계속 정상으로 보냄
+                    log.info("[이탈감지] 모듈 {} 이탈 유지 중... (현재 {}분 경과)", moduleNum, minutesPassed);
                 }
             }
         }
-
-        // --- 실시간 상태 전송 (지연 로직 반영됨) ---
-        com.mbsystem.MBSystem.dto.LeaveStatusMessage statusMessage = new com.mbsystem.MBSystem.dto.LeaveStatusMessage(
-                moduleNum,
-                placeId,
-                statusToSend
-        );
-        messagingTemplate.convertAndSend("/topic/leave/" + placeId + "/" + moduleNum, statusMessage);
     }
 }

@@ -1,5 +1,6 @@
 package com.mbsystem.MBSystem.domain;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -10,6 +11,7 @@ import lombok.Setter;
 @Setter
 @Entity
 @Table(name = "place")
+@JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
 public class Place {
   @Id
   @GeneratedValue(strategy = GenerationType.IDENTITY)

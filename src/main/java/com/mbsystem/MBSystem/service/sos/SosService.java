@@ -2,11 +2,13 @@ package com.mbsystem.MBSystem.service.sos;
 
 import com.mbsystem.MBSystem.domain.Module;
 import com.mbsystem.MBSystem.domain.Sos;
+import com.mbsystem.MBSystem.dto.AdminAlertMessage;
 import com.mbsystem.MBSystem.dto.RssiScanRequest;
 import com.mbsystem.MBSystem.dto.SensorDataRequest;
 import com.mbsystem.MBSystem.dto.SosAlertMessage;
 import com.mbsystem.MBSystem.repository.module.ModuleRepository;
 import com.mbsystem.MBSystem.repository.sos.SosRepository;
+import com.mbsystem.MBSystem.service.admin.AdminService;
 import com.mbsystem.MBSystem.service.ap.LocationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +30,7 @@ public class SosService {
     private final ModuleRepository moduleRepository;
     private final LocationService locationService;
     private final SimpMessagingTemplate messagingTemplate;
+    private final AdminService adminService;
 
     private final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(4);
     private final Map<Long, ScheduledFuture<?>> activeAlerts = new ConcurrentHashMap<>();
@@ -65,6 +68,16 @@ public class SosService {
 
         sendAlert(alert);
         scheduleRepeat(saved.getId(), alert);
+
+        adminService.broadcastToAdmin(new AdminAlertMessage(
+                "SOS",
+                saved.getId(),
+                module.getModuleNum(),
+                module.getPlace().getId(),
+                saved.getSosAt(),
+                saved.getXCoordinate(),
+                saved.getYCoordinate()
+        ));
     }
 
     @Transactional

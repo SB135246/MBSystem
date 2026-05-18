@@ -12,5 +12,5 @@ import lombok.Setter;
 public class LeaveStatusMessage {
     private Long moduleNum;
     private Long placeId;
-    private boolean isInPlace; // 구역 내에 있는지 여부 (true: 정상, false: 이탈 중)
+    private boolean inPlace;  // true = 구역 내, false = 이탈
 }

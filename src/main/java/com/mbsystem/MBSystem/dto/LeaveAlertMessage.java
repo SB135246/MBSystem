@@ -12,4 +12,5 @@ public class LeaveAlertMessage {
     private Long moduleNum;
     private Long placeId;
     private Instant leavedAt;
+    private boolean inPlace;
 }

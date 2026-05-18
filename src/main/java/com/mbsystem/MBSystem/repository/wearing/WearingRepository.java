@@ -11,7 +11,8 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 
-import static com.mbsystem.MBSystem.domain.QLeave.leave;
+import com.mbsystem.MBSystem.domain.QModule;
+
 import static com.mbsystem.MBSystem.domain.QWearing.wearing;
 
 @Repository
@@ -34,6 +35,14 @@ public class WearingRepository {
   public List<Wearing> findById(Long moduleId){
     return queryFactory.selectFrom(wearing)
         .where(wearing.module.id.eq(moduleId))
+        .fetch();
+  }
+
+  public List<Wearing> findByPlaceId(Long placeId) {
+    return queryFactory.selectFrom(wearing)
+        .join(wearing.module, QModule.module)
+        .where(QModule.module.place.id.eq(placeId))
+        .orderBy(wearing.removedAt.desc())
         .fetch();
   }
 
