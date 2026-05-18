@@ -25,100 +25,107 @@ public class LocationService {
   /**
    * ESP32로부터 받은 TOP 3 RSSI 데이터를 통해 사용자 위치 계산
    */
-  public double[] calculateUserLocation(List<RssiScanRequest> scanRequests) {
+  public double[] calculateUserLocation(
+      List<RssiScanRequest> scanRequests
+  ) {
 
-    if (scanRequests.size() < 3) {
-      throw new IllegalArgumentException("삼변측량을 위해 최소 3개의 AP 데이터가 필요합니다.");
+    if (scanRequests.isEmpty()) {
+      throw new IllegalArgumentException(
+          "AP 데이터가 없습니다."
+      );
     }
 
-    Long moduleNum = scanRequests.get(0).getModuleNum();
-    Long placeId = scanRequests.get(0).getPlaceId();
+    Long moduleNum =
+        scanRequests.get(0).getModuleNum();
 
-    // AP 정보 미리 조회
-    List<Ap> topApList = scanRequests.stream()
-        .limit(3)
-        .map(request ->
-            apRepository.findBySsidAndPlaceId(
-                request.getSsid(),
-                request.getPlaceId()
-            ).orElseThrow(() ->
-                new RuntimeException(
-                    "등록되지 않은 AP: " + request.getSsid()
+    Long placeId =
+        scanRequests.get(0).getPlaceId();
+
+    // =========================
+    // strongest RSSI AP 선택
+    // =========================
+
+    RssiScanRequest strongestRequest =
+        scanRequests.stream()
+            .max((a, b) ->
+                Double.compare(
+                    a.getRssi(),
+                    b.getRssi()
                 )
             )
-        )
-        .collect(Collectors.toList());
+            .orElseThrow();
 
     // =========================
-    // 좌표 + 거리 계산
+    // AP 조회
     // =========================
 
-    List<double[]> points = java.util.stream.IntStream
-        .range(0, topApList.size())
-        .mapToObj(i -> {
-
-          Ap ap = topApList.get(i);
-
-          RssiScanRequest request = scanRequests.get(i);
-
-          double distance =
-              rssiToDistance(request.getRssi());
-
-          return new double[]{
-              ap.getXCoordinate(),
-              ap.getYCoordinate(),
-              distance
-          };
-        })
-        .collect(Collectors.toList());
+    Ap strongestAp =
+        apRepository.findBySsidAndPlaceId(
+            strongestRequest.getSsid(),
+            strongestRequest.getPlaceId()
+        ).orElseThrow(() ->
+            new RuntimeException(
+                "등록되지 않은 AP"
+            )
+        );
 
     // =========================
-    // floor 과반수 계산
+    // 위치 = strongest AP 좌표
     // =========================
 
-    Long majorityFloor = topApList.stream()
-        .collect(Collectors.groupingBy(
-            Ap::getFloor,
-            Collectors.counting()
-        ))
-        .entrySet()
-        .stream()
-        .max(java.util.Map.Entry.comparingByValue())
-        .orElseThrow(() ->
-            new RuntimeException("층 정보 없음")
-        )
-        .getKey();
+    double userX =
+        strongestAp.getXCoordinate();
+
+    double userY =
+        strongestAp.getYCoordinate();
 
     // =========================
-    // 삼변측량
+    // radius 계산
     // =========================
 
-    double[] location = trilateration(
-        points.get(0),
-        points.get(1),
-        points.get(2)
-    );
+    double radius =
+        rssiToRadius(
+            strongestRequest.getRssi()
+        );
+
+    // =========================
+    // 응답
+    // =========================
 
     LocationResponse response =
         new LocationResponse(
             moduleNum,
             placeId,
-            location[0],
-            location[1],
-            majorityFloor
+            userX,
+            userY,
+            strongestAp.getFloor(),
+            radius
         );
 
     messagingTemplate.convertAndSend(
-        "/topic/location/" +
-            placeId +
-            "/" +
-            moduleNum,
+        "/topic/location/"
+            + placeId
+            + "/"
+            + moduleNum,
         response
     );
 
-    return location;
+    return new double[]{
+        userX,
+        userY
+    };
   }
 
+  private double rssiToRadius(double rssi) {
+
+    if (rssi >= -45) return 1.0;
+    if (rssi >= -55) return 2.0;
+    if (rssi >= -65) return 4.0;
+    if (rssi >= -75) return 6.0;
+
+    return 8.0;
+  }
+  
   /**
    * RSSI를 거리(m)로 변환하는 공식 (Log-Distance Path Loss Model)
    */
