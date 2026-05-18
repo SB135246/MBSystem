@@ -30,6 +30,10 @@ public class ApRepository {
     return apRepository.save(ap);
   }
 
+  public Optional<Ap> findById(Long id) {
+    return apRepository.findById(id);
+  }
+
   public Optional<Ap> findBySsidAndPlaceId(String ssid, Long placeId) {
     QAp ap = QAp.ap;
 

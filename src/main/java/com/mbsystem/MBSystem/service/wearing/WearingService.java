@@ -3,8 +3,10 @@ package com.mbsystem.MBSystem.service.wearing;
 import com.mbsystem.MBSystem.domain.Wearing;
 import com.mbsystem.MBSystem.dto.SensorDataRequest;
 import com.mbsystem.MBSystem.dto.WearingStatusMessage;
+import com.mbsystem.MBSystem.dto.AdminAlertMessage;
 import com.mbsystem.MBSystem.repository.module.ModuleRepository;
 import com.mbsystem.MBSystem.repository.wearing.WearingRepository;
+import com.mbsystem.MBSystem.service.admin.AdminService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -24,6 +26,7 @@ public class WearingService {
     private final SimpMessagingTemplate messagingTemplate;
     private final WearingRepository wearingRepository;
     private final ModuleRepository moduleRepository;
+    private final AdminService adminService;
 
     // 모듈별 직전 착용 상태 저장 (메모리 관리)
     private final Map<String, Boolean> lastStatusMap = new ConcurrentHashMap<>();
@@ -44,6 +47,15 @@ public class WearingService {
         // 착용 상태가 변경되었을 때 (특히 착용 -> 미착용으로 변할 때) DB 기록
         if (lastStatus != null && lastStatus && !isWearing) {
             saveWearingRecord(request);
+            moduleRepository.findByModuleNumAndPlaceId(
+                    (long) request.getModule_num(), (long) request.getPlace_id())
+                    .ifPresent(module -> adminService.broadcastToAdmin(new AdminAlertMessage(
+                            "WEARING",
+                            null,
+                            module.getModuleNum(),
+                            module.getPlace().getId(),
+                            java.time.Instant.now()
+                    )));
         }
 
         // 현재 상태 업데이트
