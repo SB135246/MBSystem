@@ -19,9 +19,6 @@ const Home = () => {
   const [alertType, setAlertType] = useState("");
   const [currentSosId, setCurrentSosId] = useState(null);
 
-  // 📍 실시간 위치 상태 추가 (기본값 1층)
-  const [currentFloor, setCurrentFloor] = useState(1);
-
   const floorImages = {
     1: oneFloor,
     2: twoFloor,
@@ -35,7 +32,8 @@ const Home = () => {
     isInitial: true, // 📍 초기 상태 플래그
   });
 
-  const [lastUpdated, setLastUpdated] = useState("");
+    markerPosition,
+    setMarkerPosition,
 
   // 📍 좌표 -> 퍼센트 변환 함수
   const convertToPercent = (x, y) => {
@@ -101,6 +99,8 @@ const Home = () => {
         setAlertType("leave");
 
         setAlertCount((prev) => prev + 1);
+
+        setLastUpdated(new Date());
       });
 
       // 🛡️ 착용 해제 알림
@@ -121,6 +121,8 @@ const Home = () => {
           setAlertType("wearing");
 
           setAlertCount((prev) => prev + 1);
+
+          setLastUpdated(new Date());
         }
       });
 
@@ -143,6 +145,8 @@ const Home = () => {
         setAlertType("sos");
 
         setAlertCount((prev) => prev + 1);
+
+        setLastUpdated(new Date());
       });
     };
 
@@ -164,7 +168,7 @@ const Home = () => {
   // "leave" | "wearing" | "sos"
   const TEST_MODE = "sos";
 
-  /*useEffect(() => {
+  useEffect(() => {
     const sendTestData = async () => {
       try {
         let testData = {};
@@ -275,7 +279,7 @@ const Home = () => {
     const timer = setInterval(sendTestData, 10000);
 
     return () => clearInterval(timer);
-  }, []);*/
+  }, []);
 
   // 🔊 오디오 준비
   useEffect(() => {
