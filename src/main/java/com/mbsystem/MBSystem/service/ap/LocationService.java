@@ -19,8 +19,8 @@ public class LocationService {
   private final SimpMessagingTemplate messagingTemplate;
 
   // 환경 변수 (현장 테스트 후 조정 필요)
-  private static final double TX_POWER_1M = -40.0; // 1m 거리에서의 평균 RSSI
-  private static final double N_CONSTANT = 2.5;    // 경로 손실 지수 (실내 보통 2.5 ~ 3.5)
+  private static final double TX_POWER_1M = -45.0; // 1m 거리에서의 평균 RSSI
+  private static final double N_CONSTANT = 3.2;    // 경로 손실 지수 (실내 보통 2.5 ~ 3.5)
 
   /**
    * ESP32로부터 받은 TOP 3 RSSI 데이터를 통해 사용자 위치 계산
@@ -123,7 +123,15 @@ public class LocationService {
    * RSSI를 거리(m)로 변환하는 공식 (Log-Distance Path Loss Model)
    */
   private double rssiToDistance(double rssi) {
-    return Math.pow(10, (TX_POWER_1M - rssi) / (10 * N_CONSTANT));
+    double distance =
+        Math.pow(
+            10,
+            (TX_POWER_1M - rssi)
+                / (10 * N_CONSTANT)
+        );
+
+    // 최대 거리 제한
+    return Math.min(distance, 12.0);
   }
 
   /**
