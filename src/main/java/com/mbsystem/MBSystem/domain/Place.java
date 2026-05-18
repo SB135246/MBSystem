@@ -21,7 +21,4 @@ public class Place {
   @Column(name = "place_name", nullable = false)
   private String placeName;
 
-  @Column(name = "map_image_path")
-  private String mapImagePath;
-
 }
