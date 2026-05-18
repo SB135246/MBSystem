@@ -19,7 +19,7 @@ public class LocationService {
   private final SimpMessagingTemplate messagingTemplate;
 
   // 환경 변수 (현장 테스트 후 조정 필요)
-  private static final double TX_POWER_1M = -45.0; // 1m 거리에서의 평균 RSSI
+  private static final double TX_POWER_1M = -40.0; // 1m 거리에서의 평균 RSSI
   private static final double N_CONSTANT = 2.5;    // 경로 손실 지수 (실내 보통 2.5 ~ 3.5)
 
   /**
