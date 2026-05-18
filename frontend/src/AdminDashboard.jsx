@@ -1,15 +1,16 @@
 import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { Bell, Wifi, MapPin, LogOut, Plus, Pencil, Trash2, Upload, X, Check } from "lucide-react";
+import { Bell, Users, LogOut, Check, Trash2, RefreshCw } from "lucide-react";
 import socket from "./socket/socket";
 import "./tailwind.css";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
 const ALERT_LABELS = {
-  SOS: { label: "SOS", color: "bg-red-100 text-red-600 border-red-200" },
-  LEAVE: { label: "위치 이탈", color: "bg-orange-100 text-orange-600 border-orange-200" },
-  WEARING: { label: "착용 해제", color: "bg-purple-100 text-purple-600 border-purple-200" },
+  SOS:        { label: "SOS",      color: "bg-red-100 text-red-600 border-red-200" },
+  LEAVE:      { label: "위치 이탈", color: "bg-orange-100 text-orange-600 border-orange-200" },
+  WEARING:    { label: "착용 해제", color: "bg-purple-100 text-purple-600 border-purple-200" },
+  DISCONNECT: { label: "연결 종료", color: "bg-gray-100 text-gray-500 border-gray-200" },
 };
 
 function formatTime(isoStr) {
@@ -23,48 +24,58 @@ function formatTime(isoStr) {
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState("alerts");
+  const [activeTab, setActiveTab] = useState("modules");
   const [placeId, setPlaceId] = useState(null);
 
-  // 알림 탭
+  // 모듈 현황 탭
+  const [moduleStatus, setModuleStatus] = useState({});
+  // { [moduleNum]: { wearing: bool, disconnected: bool, lastAlert: string } }
+
+  // 알림 로그 탭
   const [alertHistory, setAlertHistory] = useState([]);
   const [liveAlerts, setLiveAlerts] = useState([]);
   const [alertLoading, setAlertLoading] = useState(false);
+  const [selectedModule, setSelectedModule] = useState("all");
+  const [deletingModule, setDeletingModule] = useState(null);
 
-  // AP 탭
-  const [apList, setApList] = useState([]);
-  const [apLoading, setApLoading] = useState(false);
-  const [showApForm, setShowApForm] = useState(false);
-  const [editingApId, setEditingApId] = useState(null);
-  const [apForm, setApForm] = useState({ ssid: "", xCoordinate: "", yCoordinate: "", floor: 1 });
+  const subsRef = useRef([]);
 
-  // 지도 탭
-  const [mapUrl, setMapUrl] = useState(null);
-  const [mapTimestamp, setMapTimestamp] = useState(Date.now());
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef(null);
-
-  // ─── 인증 체크 ───────────────────────────────────────
+  // ─── 인증 체크 ─────────────────────────────────────
   useEffect(() => {
     const isAdmin = localStorage.getItem("isAdmin");
     if (!isAdmin) { navigate("/admin"); return; }
-
     const ids = JSON.parse(localStorage.getItem("managedPlaceIds") || "[]");
-    const pid = ids[0] ?? 1;
-    setPlaceId(pid);
+    setPlaceId(ids[0] ?? 1);
   }, []);
 
-  // ─── WebSocket 구독 ──────────────────────────────────
+  // ─── WebSocket 구독 ────────────────────────────────
   useEffect(() => {
     if (!placeId) return;
 
     const subscribe = () => {
-      socket.subscribe(`/topic/admin/${placeId}`, (msg) => {
+      // 관리자 알림 토픽
+      const adminSub = socket.subscribe(`/topic/admin/${placeId}`, (msg) => {
         try {
           const data = JSON.parse(msg.body);
-          setLiveAlerts((prev) => [data, ...prev].slice(0, 50));
+          setLiveAlerts((prev) => [{ ...data, _id: Date.now() }, ...prev].slice(0, 100));
+
+          // 모듈 상태 업데이트
+          setModuleStatus((prev) => {
+            const key = String(data.moduleNum);
+            const cur = prev[key] || {};
+            return {
+              ...prev,
+              [key]: {
+                ...cur,
+                disconnected: data.type === "DISCONNECT" ? true : cur.disconnected,
+                lastAlert: data.type,
+                lastAlertAt: data.occurredAt,
+              },
+            };
+          });
         } catch (e) { console.error(e); }
       });
+      subsRef.current.push(adminSub);
     };
 
     if (socket.connected) {
@@ -74,10 +85,34 @@ const AdminDashboard = () => {
       socket.activate();
     }
 
-    return () => socket.deactivate();
+    return () => {
+      subsRef.current.forEach((s) => { try { s.unsubscribe(); } catch (_) {} });
+      subsRef.current = [];
+    };
   }, [placeId]);
 
-  // ─── 알림 이력 불러오기 ──────────────────────────────
+  // ─── 착용 상태 구독 (알림 이력 로드 후 모듈별) ───────
+  const subscribeWearing = (moduleNums) => {
+    if (!placeId) return;
+    moduleNums.forEach((num) => {
+      const sub = socket.subscribe(`/topic/wearing/${placeId}/${num}`, (msg) => {
+        try {
+          const data = JSON.parse(msg.body);
+          setModuleStatus((prev) => ({
+            ...prev,
+            [String(num)]: {
+              ...(prev[String(num)] || {}),
+              wearing: data.wearing ?? data.isWearing,
+              disconnected: false,
+            },
+          }));
+        } catch (e) { console.error(e); }
+      });
+      subsRef.current.push(sub);
+    });
+  };
+
+  // ─── 알림 이력 불러오기 ────────────────────────────
   const fetchAlerts = async () => {
     if (!placeId) return;
     setAlertLoading(true);
@@ -85,36 +120,35 @@ const AdminDashboard = () => {
       const res = await fetch(`${API_URL}/admin/alerts/${placeId}`);
       const data = await res.json();
       setAlertHistory(data);
+
+      // 이력에서 고유 모듈 번호 추출 → 착용 토픽 구독
+      const nums = [...new Set(data.map((a) => a.moduleNum))];
+      subscribeWearing(nums);
+
+      // 모듈 상태 초기화
+      setModuleStatus((prev) => {
+        const next = { ...prev };
+        nums.forEach((n) => { if (!next[String(n)]) next[String(n)] = {}; });
+        return next;
+      });
     } catch (e) { console.error(e); }
     finally { setAlertLoading(false); }
   };
 
-  // ─── AP 목록 불러오기 ────────────────────────────────
-  const fetchAps = async () => {
-    if (!placeId) return;
-    setApLoading(true);
-    try {
-      const res = await fetch(`${API_URL}/admin/ap/${placeId}`);
-      const data = await res.json();
-      setApList(data);
-    } catch (e) { console.error(e); }
-    finally { setApLoading(false); }
-  };
-
-  // ─── 탭 변경 시 데이터 로드 ─────────────────────────
+  // ─── 탭 변경 시 데이터 로드 ──────────────────────
   useEffect(() => {
     if (!placeId) return;
-    if (activeTab === "alerts") fetchAlerts();
-    if (activeTab === "ap" || activeTab === "map") fetchAps();
-    if (activeTab === "map") setMapUrl(`${API_URL}/admin/map/${placeId}?t=${mapTimestamp}`);
-  }, [activeTab, placeId]);
+    fetchAlerts();
+  }, [placeId]);
 
-  // ─── SOS 확인 처리 ──────────────────────────────────
+  // ─── SOS 확인 처리 ────────────────────────────────
   const confirmSos = async (alertId) => {
     try {
       await fetch(`${API_URL}/sos/confirm/${alertId}`, { method: "POST" });
       setAlertHistory((prev) =>
-        prev.map((a) => a.alertId === alertId ? { ...a, isConfirmed: true, confirmedAt: new Date().toISOString() } : a)
+        prev.map((a) => a.alertId === alertId
+          ? { ...a, isConfirmed: true, confirmedAt: new Date().toISOString() }
+          : a)
       );
       setLiveAlerts((prev) =>
         prev.map((a) => a.alertId === alertId ? { ...a, confirmed: true } : a)
@@ -122,61 +156,37 @@ const AdminDashboard = () => {
     } catch (e) { console.error(e); }
   };
 
-  // ─── AP CRUD ─────────────────────────────────────────
-  const openCreateForm = () => {
-    setEditingApId(null);
-    setApForm({ ssid: "", xCoordinate: "", yCoordinate: "", floor: 1 });
-    setShowApForm(true);
-  };
-
-  const openEditForm = (ap) => {
-    setEditingApId(ap.id);
-    setApForm({ ssid: ap.ssid, xCoordinate: ap.xCoordinate, yCoordinate: ap.yCoordinate, floor: ap.floor });
-    setShowApForm(true);
-  };
-
-  const saveAp = async () => {
-    const body = { ...apForm, xCoordinate: parseFloat(apForm.xCoordinate), yCoordinate: parseFloat(apForm.yCoordinate), floor: parseInt(apForm.floor), placeId };
+  // ─── 모듈 로그 삭제 ───────────────────────────────
+  const deleteModuleLogs = async (moduleNum) => {
+    if (!window.confirm(`모듈 ${moduleNum}의 로그를 전부 삭제하시겠습니까?`)) return;
+    setDeletingModule(moduleNum);
     try {
-      if (editingApId) {
-        await fetch(`${API_URL}/admin/ap/${editingApId}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      } else {
-        await fetch(`${API_URL}/admin/ap`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      }
-      setShowApForm(false);
-      fetchAps();
+      await fetch(`${API_URL}/admin/logs/module/${moduleNum}/${placeId}`, { method: "DELETE" });
+      setAlertHistory((prev) => prev.filter((a) => a.moduleNum !== moduleNum));
+      setLiveAlerts((prev) => prev.filter((a) => a.moduleNum !== moduleNum));
     } catch (e) { console.error(e); }
+    finally { setDeletingModule(null); }
   };
 
-  const deleteAp = async (apId) => {
-    if (!window.confirm("AP를 삭제하시겠습니까?")) return;
-    try {
-      await fetch(`${API_URL}/admin/ap/${apId}`, { method: "DELETE" });
-      fetchAps();
-    } catch (e) { console.error(e); }
-  };
+  const handleLogout = () => { localStorage.clear(); navigate("/"); };
 
-  // ─── 지도 이미지 업로드 ──────────────────────────────
-  const uploadMap = async (file) => {
-    if (!file) return;
-    setUploading(true);
-    const formData = new FormData();
-    formData.append("file", file);
-    try {
-      await fetch(`${API_URL}/admin/map/${placeId}`, { method: "POST", body: formData });
-      const ts = Date.now();
-      setMapTimestamp(ts);
-      setMapUrl(`${API_URL}/admin/map/${placeId}?t=${ts}`);
-    } catch (e) { console.error(e); }
-    finally { setUploading(false); }
-  };
+  // 모듈 목록 (이력 + 실시간으로 파악된 모든 모듈)
+  const knownModules = [...new Set([
+    ...alertHistory.map((a) => a.moduleNum),
+    ...liveAlerts.map((a) => a.moduleNum),
+    ...Object.keys(moduleStatus).map(Number),
+  ])].sort((a, b) => a - b);
 
-  const handleLogout = () => {
-    localStorage.clear();
-    navigate("/");
-  };
+  // 선택된 모듈로 필터링된 이력
+  const filteredHistory = selectedModule === "all"
+    ? alertHistory
+    : alertHistory.filter((a) => String(a.moduleNum) === selectedModule);
 
-  // ─── 렌더 ─────────────────────────────────────────────
+  const filteredLive = selectedModule === "all"
+    ? liveAlerts
+    : liveAlerts.filter((a) => String(a.moduleNum) === selectedModule);
+
+  // ─── 렌더 ─────────────────────────────────────────
   return (
     <div className="min-h-screen bg-[#F8F9FA]">
       <div className="w-full max-w-md mx-auto flex flex-col min-h-screen">
@@ -184,7 +194,8 @@ const AdminDashboard = () => {
         {/* 헤더 */}
         <header className="sticky top-0 z-50 bg-[#0052CC] text-white px-4 py-4 flex justify-between items-center">
           <h1 className="font-bold text-lg">MBS 관리자</h1>
-          <button onClick={handleLogout} className="flex items-center gap-1 bg-white/20 px-3 py-1 rounded-lg text-sm active:scale-95">
+          <button onClick={handleLogout}
+            className="flex items-center gap-1 bg-white/20 px-3 py-1 rounded-lg text-sm active:scale-95">
             <LogOut size={14} /> 로그아웃
           </button>
         </header>
@@ -192,47 +203,151 @@ const AdminDashboard = () => {
         {/* 탭 */}
         <div className="flex bg-white border-b border-gray-200 sticky top-[56px] z-40">
           {[
-            { key: "alerts", label: "알림", icon: <Bell size={14} /> },
-            { key: "ap", label: "AP 편집", icon: <Wifi size={14} /> },
-            { key: "map", label: "지도 편집", icon: <MapPin size={14} /> },
+            { key: "modules", label: "모듈 현황", icon: <Users size={14} /> },
+            { key: "alerts",  label: "알림 로그", icon: <Bell size={14} /> },
           ].map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
+            <button key={tab.key} onClick={() => setActiveTab(tab.key)}
               className={`flex-1 flex items-center justify-center gap-1 py-3 text-sm font-semibold border-b-2 transition-colors ${
-                activeTab === tab.key ? "border-[#0052CC] text-[#0052CC]" : "border-transparent text-gray-400"
-              }`}
-            >
+                activeTab === tab.key
+                  ? "border-[#0052CC] text-[#0052CC]"
+                  : "border-transparent text-gray-400"
+              }`}>
               {tab.icon} {tab.label}
             </button>
           ))}
         </div>
 
-        {/* ───────── 알림 탭 ───────── */}
+        {/* ───────── 모듈 현황 탭 ───────── */}
+        {activeTab === "modules" && (
+          <div className="flex-1 p-3 space-y-3">
+            <section className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-bold text-sm text-gray-700">모듈 목록</h2>
+                <button onClick={fetchAlerts}
+                  className="flex items-center gap-1 text-xs text-[#0052CC]">
+                  <RefreshCw size={12} /> 새로고침
+                </button>
+              </div>
+
+              {knownModules.length === 0 ? (
+                <p className="text-center text-sm text-gray-400 py-6">
+                  아직 연결된 모듈이 없습니다.
+                </p>
+              ) : (
+                <div className="space-y-2">
+                  {knownModules.map((num) => {
+                    const st = moduleStatus[String(num)] || {};
+                    const lastLabel = st.lastAlert ? ALERT_LABELS[st.lastAlert] : null;
+
+                    return (
+                      <div key={num}
+                        className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-gray-50">
+                        <div className="flex items-center gap-3">
+                          {/* 착용/미착용/종료 상태 점 */}
+                          <div className={`w-3 h-3 rounded-full flex-shrink-0 ${
+                            st.disconnected
+                              ? "bg-gray-400"
+                              : st.wearing
+                                ? "bg-green-400 animate-pulse"
+                                : "bg-yellow-400"
+                          }`} />
+                          <div>
+                            <p className="font-bold text-sm">모듈 {num}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {st.disconnected
+                                ? "연결 종료"
+                                : st.wearing === true
+                                  ? "착용 중"
+                                  : st.wearing === false
+                                    ? "미착용"
+                                    : "대기 중"}
+                              {st.lastAlertAt && ` · ${formatTime(st.lastAlertAt)}`}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {/* 마지막 알림 뱃지 */}
+                          {lastLabel && (
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${lastLabel.color}`}>
+                              {lastLabel.label}
+                            </span>
+                          )}
+                          {/* 로그 삭제 버튼 */}
+                          <button
+                            onClick={() => deleteModuleLogs(num)}
+                            disabled={deletingModule === num}
+                            className="flex items-center gap-1 bg-red-50 text-red-400 text-xs px-2 py-1 rounded-lg active:scale-95 disabled:opacity-50">
+                            <Trash2 size={11} />
+                            {deletingModule === num ? "삭제 중" : "로그삭제"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+
+        {/* ───────── 알림 로그 탭 ───────── */}
         {activeTab === "alerts" && (
           <div className="flex-1 p-3 space-y-3">
 
+            {/* 모듈 필터 */}
+            {knownModules.length > 0 && (
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                <button
+                  onClick={() => setSelectedModule("all")}
+                  className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                    selectedModule === "all"
+                      ? "bg-[#0052CC] text-white border-[#0052CC]"
+                      : "bg-white text-gray-500 border-gray-200"
+                  }`}>
+                  전체
+                </button>
+                {knownModules.map((num) => (
+                  <button key={num}
+                    onClick={() => setSelectedModule(String(num))}
+                    className={`flex-shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
+                      selectedModule === String(num)
+                        ? "bg-[#0052CC] text-white border-[#0052CC]"
+                        : "bg-white text-gray-500 border-gray-200"
+                    }`}>
+                    모듈 {num}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {/* 실시간 알림 */}
-            {liveAlerts.length > 0 && (
+            {filteredLive.length > 0 && (
               <section className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
                 <h2 className="font-bold text-sm text-gray-700 mb-3 flex items-center gap-1">
-                  <span className="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                  <span className="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse" />
                   실시간 알림
                 </h2>
                 <div className="space-y-2">
-                  {liveAlerts.map((a, i) => {
-                    const style = ALERT_LABELS[a.type] ?? { label: a.type, color: "bg-gray-100 text-gray-600" };
+                  {filteredLive.map((a) => {
+                    const style = ALERT_LABELS[a.type] ?? { label: a.type, color: "bg-gray-100 text-gray-600 border-gray-200" };
                     return (
-                      <div key={i} className={`flex items-center justify-between p-3 rounded-lg border ${style.color}`}>
+                      <div key={a._id}
+                        className={`flex items-center justify-between p-3 rounded-lg border ${style.color}`}>
                         <div>
                           <span className="font-bold text-sm">{style.label}</span>
                           <p className="text-xs mt-0.5">모듈 {a.moduleNum} · {formatTime(a.occurredAt)}</p>
                         </div>
                         {a.type === "SOS" && !a.confirmed && (
-                          <button onClick={() => confirmSos(a.alertId)} className="bg-red-500 text-white text-xs px-3 py-1 rounded-lg active:scale-95">확인</button>
+                          <button onClick={() => confirmSos(a.alertId)}
+                            className="bg-red-500 text-white text-xs px-3 py-1 rounded-lg active:scale-95">
+                            확인
+                          </button>
                         )}
                         {a.type === "SOS" && a.confirmed && (
-                          <span className="text-xs text-gray-400 flex items-center gap-1"><Check size={12} /> 처리됨</span>
+                          <span className="text-xs text-gray-400 flex items-center gap-1">
+                            <Check size={12} /> 처리됨
+                          </span>
                         )}
                       </div>
                     );
@@ -244,32 +359,47 @@ const AdminDashboard = () => {
             {/* 알림 이력 */}
             <section className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="font-bold text-sm text-gray-700">알림 이력</h2>
-                <button onClick={fetchAlerts} className="text-xs text-[#0052CC]">새로고침</button>
+                <h2 className="font-bold text-sm text-gray-700">
+                  알림 이력
+                  {selectedModule !== "all" && (
+                    <span className="ml-2 text-[#0052CC]">모듈 {selectedModule}</span>
+                  )}
+                </h2>
+                <button onClick={fetchAlerts} className="text-xs text-[#0052CC] flex items-center gap-1">
+                  <RefreshCw size={12} /> 새로고침
+                </button>
               </div>
 
               {alertLoading ? (
                 <p className="text-center text-sm text-gray-400 py-4">불러오는 중...</p>
-              ) : alertHistory.length === 0 ? (
+              ) : filteredHistory.length === 0 ? (
                 <p className="text-center text-sm text-gray-400 py-4">알림 이력이 없습니다.</p>
               ) : (
                 <div className="space-y-2">
-                  {alertHistory.map((a, i) => {
-                    const style = ALERT_LABELS[a.type] ?? { label: a.type, color: "bg-gray-100 text-gray-600" };
+                  {filteredHistory.map((a, i) => {
+                    const style = ALERT_LABELS[a.type] ?? { label: a.type, color: "bg-gray-100 text-gray-600 border-gray-200" };
                     return (
-                      <div key={i} className={`flex items-center justify-between p-3 rounded-lg border ${style.color}`}>
+                      <div key={i}
+                        className={`flex items-center justify-between p-3 rounded-lg border ${style.color}`}>
                         <div>
                           <span className="font-bold text-sm">{style.label}</span>
                           <p className="text-xs mt-0.5">모듈 {a.moduleNum} · {formatTime(a.occurredAt)}</p>
                           {a.type === "SOS" && a.isConfirmed && (
-                            <p className="text-xs text-gray-400 mt-0.5">확인됨 · {formatTime(a.confirmedAt)}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              확인됨 · {formatTime(a.confirmedAt)}
+                            </p>
                           )}
                         </div>
                         {a.type === "SOS" && !a.isConfirmed && (
-                          <button onClick={() => confirmSos(a.alertId)} className="bg-red-500 text-white text-xs px-3 py-1 rounded-lg active:scale-95">확인</button>
+                          <button onClick={() => confirmSos(a.alertId)}
+                            className="bg-red-500 text-white text-xs px-3 py-1 rounded-lg active:scale-95">
+                            확인
+                          </button>
                         )}
                         {a.type === "SOS" && a.isConfirmed && (
-                          <span className="text-xs text-gray-400 flex items-center gap-1"><Check size={12} /> 처리됨</span>
+                          <span className="text-xs text-gray-400 flex items-center gap-1">
+                            <Check size={12} /> 처리됨
+                          </span>
                         )}
                       </div>
                     );
@@ -280,142 +410,7 @@ const AdminDashboard = () => {
           </div>
         )}
 
-        {/* ───────── AP 편집 탭 ───────── */}
-        {activeTab === "ap" && (
-          <div className="flex-1 p-3 space-y-3">
-            <section className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-bold text-sm text-gray-700">AP 목록</h2>
-                <button onClick={openCreateForm} className="flex items-center gap-1 bg-[#0052CC] text-white text-xs px-3 py-1.5 rounded-lg active:scale-95">
-                  <Plus size={12} /> AP 추가
-                </button>
-              </div>
-
-              {apLoading ? (
-                <p className="text-center text-sm text-gray-400 py-4">불러오는 중...</p>
-              ) : apList.length === 0 ? (
-                <p className="text-center text-sm text-gray-400 py-4">등록된 AP가 없습니다.</p>
-              ) : (
-                <div className="space-y-2">
-                  {apList.map((ap) => (
-                    <div key={ap.id} className="flex items-center justify-between p-3 rounded-lg bg-gray-50 border border-gray-100">
-                      <div>
-                        <p className="font-bold text-sm">{ap.ssid}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                          X: {ap.xCoordinate} · Y: {ap.yCoordinate} · {ap.floor}층
-                        </p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => openEditForm(ap)} className="p-2 rounded-lg bg-blue-50 text-blue-500 active:scale-95">
-                          <Pencil size={14} />
-                        </button>
-                        <button onClick={() => deleteAp(ap.id)} className="p-2 rounded-lg bg-red-50 text-red-500 active:scale-95">
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </section>
-          </div>
-        )}
-
-        {/* ───────── 지도 편집 탭 ───────── */}
-        {activeTab === "map" && (
-          <div className="flex-1 p-3 space-y-3">
-
-            {/* 지도 이미지 업로드 */}
-            <section className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="font-bold text-sm text-gray-700">지도 이미지</h2>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  className="flex items-center gap-1 bg-[#0052CC] text-white text-xs px-3 py-1.5 rounded-lg active:scale-95"
-                  disabled={uploading}
-                >
-                  <Upload size={12} /> {uploading ? "업로드 중..." : "이미지 변경"}
-                </button>
-                <input ref={fileInputRef} type="file" accept="image/*" className="hidden"
-                  onChange={(e) => uploadMap(e.target.files[0])} />
-              </div>
-
-              {/* 지도 + AP 마커 */}
-              <div className="relative w-full border rounded-lg overflow-hidden bg-gray-100">
-                {mapUrl ? (
-                  <img
-                    src={mapUrl}
-                    alt="지도"
-                    className="w-full"
-                    onError={() => setMapUrl(null)}
-                  />
-                ) : (
-                  <div className="flex items-center justify-center h-48 text-sm text-gray-400">
-                    등록된 지도가 없습니다
-                  </div>
-                )}
-
-                {/* AP 마커 오버레이 */}
-                {mapUrl && apList.map((ap) => {
-                  const maxCoord = 10;
-                  const left = (ap.xCoordinate / maxCoord * 100).toFixed(1) + "%";
-                  const top = ((maxCoord - ap.yCoordinate) / maxCoord * 100).toFixed(1) + "%";
-                  return (
-                    <div
-                      key={ap.id}
-                      style={{ left, top }}
-                      className="absolute -translate-x-1/2 -translate-y-1/2 flex flex-col items-center"
-                    >
-                      <div className="w-3 h-3 rounded-full bg-blue-500 border-2 border-white shadow" />
-                      <span className="text-[10px] font-bold text-blue-700 bg-white/80 px-1 rounded mt-0.5 leading-tight">{ap.ssid}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          </div>
-        )}
-
       </div>
-
-      {/* ───────── AP 편집 모달 ───────── */}
-      {showApForm && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-base">{editingApId ? "AP 수정" : "AP 추가"}</h3>
-              <button onClick={() => setShowApForm(false)} className="text-gray-400 active:scale-95"><X size={20} /></button>
-            </div>
-
-            <div className="space-y-3">
-              {[
-                { label: "SSID", key: "ssid", type: "text", placeholder: "예: AP1" },
-                { label: "X 좌표 (m)", key: "xCoordinate", type: "number", placeholder: "0 ~ 10" },
-                { label: "Y 좌표 (m)", key: "yCoordinate", type: "number", placeholder: "0 ~ 10" },
-                { label: "층", key: "floor", type: "number", placeholder: "1" },
-              ].map(({ label, key, type, placeholder }) => (
-                <div key={key}>
-                  <label className="text-xs text-gray-500 mb-1 block">{label}</label>
-                  <input
-                    type={type}
-                    placeholder={placeholder}
-                    value={apForm[key]}
-                    onChange={(e) => setApForm((prev) => ({ ...prev, [key]: e.target.value }))}
-                    className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-[#0052CC]"
-                  />
-                </div>
-              ))}
-            </div>
-
-            <button
-              onClick={saveAp}
-              className="mt-5 w-full bg-[#0052CC] text-white py-3 rounded-xl font-bold active:scale-95"
-            >
-              {editingApId ? "수정 완료" : "추가"}
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
