@@ -9,14 +9,16 @@ export const AlertProvider = ({ children }) => {
   // 🕒 마지막 업데이트 시간
   const [lastUpdated, setLastUpdated] = useState(null);
 
-  // 📍 현재 마커 위치
-  const [markerPosition, setMarkerPosition] = useState({
-    x: 195,
-    y: 160,
-  });
-
   // 🏢 현재 층
   const [currentFloor, setCurrentFloor] = useState(1);
+
+  // 📍 현재 마커 위치
+  const [markerPosition, setMarkerPosition] = useState({
+    x: 50,
+    y: 60,
+    radius: 0,
+    isInitial: true,
+  });
 
   // 🔔 알림 추가
   const addAlert = (alert) => {
