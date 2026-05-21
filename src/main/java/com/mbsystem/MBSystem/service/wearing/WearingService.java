@@ -44,20 +44,29 @@ public class WearingService {
         // 이전 상태 가져오기 (없으면 현재 상태로 초기화)
         Boolean lastStatus = lastStatusMap.get(statusKey);
 
-        // 착용 상태가 변경되었을 때 (특히 착용 -> 미착용으로 변할 때) DB 기록
+        // 착용 상태가 변경되었을 때 (착용 -> 미착용) DB 기록 + 관리자 알림
         if (lastStatus != null && lastStatus && !isWearing) {
-            saveWearingRecord(request);
             moduleRepository.findByModuleNumAndPlaceId(
                     (long) request.getModule_num(), (long) request.getPlace_id())
-                    .ifPresent(module -> adminService.broadcastToAdmin(new AdminAlertMessage(
-                            "WEARING",
-                            null,
-                            module.getModuleNum(),
-                            module.getPlace().getId(),
-                            java.time.Instant.now(),
-                            null,
-                            null
-                    )));
+                    .ifPresent(module -> {
+                        // DB 저장
+                        Wearing wearing = new Wearing();
+                        wearing.setModule(module);
+                        wearing.setRemovedAt(Instant.now());
+                        Wearing saved = wearingRepository.save(wearing);
+                        log.info("[Wearing] 미착용 감지: DB 기록 완료 (모듈 {})", request.getModule_num());
+
+                        // 관리자 알림 (place 지연로딩 대신 request에서 직접 사용)
+                        adminService.broadcastToAdmin(new AdminAlertMessage(
+                                "WEARING",
+                                saved.getId(),
+                                module.getModuleNum(),
+                                (long) request.getPlace_id(),
+                                Instant.now(),
+                                null,
+                                null
+                        ));
+                    });
         }
 
         // 현재 상태 업데이트
@@ -80,14 +89,4 @@ public class WearingService {
         return (light <= LUX_THRESHOLD) || (touch <= TOUCH_THRESHOLD);
     }
 
-    private void saveWearingRecord(SensorDataRequest request) {
-        moduleRepository.findByModuleNumAndPlaceId((long) request.getModule_num(), (long) request.getPlace_id())
-                .ifPresent(module -> {
-                    Wearing wearing = new Wearing();
-                    wearing.setModule(module);
-                    wearing.setRemovedAt(Instant.now());
-                    wearingRepository.save(wearing);
-                    log.info("[Wearing] 미착용 감지: DB 기록 완료 (모듈 {})", request.getModule_num());
-                });
-    }
 }
