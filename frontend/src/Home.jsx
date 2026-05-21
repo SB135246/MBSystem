@@ -52,121 +52,162 @@ const Home = () => {
   const { placeId, moduleNum } = useParams();
 
   useEffect(() => {
+    let locationSub;
+    let leaveSub;
+    let wearingSub;
+    let sosSub;
+
+    // 이미 연결되어 있으면 중복 연결 방지
+    if (socket.active) {
+      console.log("이미 웹소켓 연결됨");
+      return;
+    }
+
     socket.onConnect = () => {
       console.log("웹소켓 연결 성공");
 
       console.log(placeId + " " + moduleNum);
 
-      // 📍 [추가] 실시간 위치 정보 수신
-      socket.subscribe(`/topic/location/${placeId}/${moduleNum}`, (message) => {
-        try {
-          const data = JSON.parse(message.body);
-          console.log("실시간 위치 수신:", data);
+      // 📍 실시간 위치 정보
+      locationSub = socket.subscribe(
+        `/topic/location/${placeId}/${moduleNum}`,
+        (message) => {
+          try {
+            const data = JSON.parse(message.body);
 
-          if (data.floor) {
-            setCurrentFloor(data.floor);
+            console.log("실시간 위치 수신:", data);
+
+            if (data.floor) {
+              setCurrentFloor(data.floor);
+            }
+
+            if (data.x !== undefined && data.y !== undefined) {
+              const pos = convertToPercent(data.x, data.y);
+
+              console.log("보정 퍼센트 좌표:", pos);
+
+              setMarkerPosition({
+                ...pos,
+                radius: data.radius || 0,
+                isInitial: false,
+              });
+            }
+
+            setLastUpdated(new Date());
+          } catch (e) {
+            console.error("위치 데이터 파싱 오류:", e);
           }
+        },
+      );
 
-          if (data.x !== undefined && data.y !== undefined) {
-            const pos = convertToPercent(data.x, data.y);
-            console.log("보정 퍼센트 좌표:", pos);
+      // 📍 위치 이탈
+      leaveSub = socket.subscribe(
+        `/topic/leave/${placeId}/${moduleNum}`,
+        (message) => {
+          console.log("웹소켓 이탈 알림:", message.body);
 
-            setMarkerPosition({
-              ...pos,
-              radius: data.radius || 0,
-              isInitial: false, // 📍 데이터 수신 시 플래그 해제
-            });
-          }
-
-          setLastUpdated(new Date());
-        } catch (e) {
-          console.error("위치 데이터 파싱 오류:", e);
-        }
-      });
-
-      // 📍 위치 이탈 알림
-      socket.subscribe(`/topic/leave/${placeId}/${moduleNum}`, (message) => {
-        console.log("웹소켓 이탈 알림:", message.body);
-
-        addAlert({
-          type: "leave",
-          message: "위치 이탈",
-        });
-
-        setAlertOpen(true);
-        setStatus("alert");
-        setAlertType("leave");
-
-        setAlertCount((prev) => prev + 1);
-
-        setLastUpdated(new Date());
-      });
-
-      // 🛡️ 착용 해제 알림
-      socket.subscribe(`/topic/wearing/${placeId}/${moduleNum}`, (message) => {
-        const data = JSON.parse(message.body);
-
-        console.log("착용 상태:", data);
-
-        // 미착용 상태일 때만
-        if (!data.wearing) {
           addAlert({
-            type: "wearing",
-            message: "장치 탈거 감지",
+            type: "leave",
+            message: "위치 이탈",
           });
 
           setAlertOpen(true);
           setStatus("alert");
-          setAlertType("wearing");
+          setAlertType("leave");
 
           setAlertCount((prev) => prev + 1);
 
           setLastUpdated(new Date());
-        }
-      });
+        },
+      );
 
-      // 🚨 SOS 알림
-      socket.subscribe(`/topic/sos/${placeId}/${moduleNum}`, (message) => {
-        const data = JSON.parse(message.body);
+      // 🛡️ 착용 해제
+      wearingSub = socket.subscribe(
+        `/topic/wearing/${placeId}/${moduleNum}`,
+        (message) => {
+          const data = JSON.parse(message.body);
 
-        console.log("SOS 수신:", data);
+          console.log("착용 상태:", data);
 
-        // 서버가 보낸 sosId 저장
-        setCurrentSosId(data.sosId);
+          if (!data.wearing) {
+            addAlert({
+              type: "wearing",
+              message: "장치 탈거 감지",
+            });
 
-        addAlert({
-          type: "sos",
-          message: "SOS 신호",
-        });
+            setAlertOpen(true);
+            setStatus("alert");
+            setAlertType("wearing");
 
-        setAlertOpen(true);
-        setStatus("alert");
-        setAlertType("sos");
+            setAlertCount((prev) => prev + 1);
 
-        setAlertCount((prev) => prev + 1);
+            setLastUpdated(new Date());
+          }
+        },
+      );
 
-        setLastUpdated(new Date());
-      });
+      // 🚨 SOS
+      sosSub = socket.subscribe(
+        `/topic/sos/${placeId}/${moduleNum}`,
+        (message) => {
+          const data = JSON.parse(message.body);
+
+          console.log("SOS 수신:", data);
+
+          setCurrentSosId(data.sosId);
+
+          addAlert({
+            type: "sos",
+            message: "SOS 신호",
+          });
+
+          setAlertOpen(true);
+          setStatus("alert");
+          setAlertType("sos");
+
+          setAlertCount((prev) => prev + 1);
+
+          setLastUpdated(new Date());
+        },
+      );
     };
 
+    // STOMP 에러
     socket.onStompError = (frame) => {
       console.error("STOMP 에러:", frame);
     };
 
+    // 웹소켓 에러
     socket.onWebSocketError = (error) => {
       console.error("WebSocket 에러:", error);
     };
 
+    // 연결 종료 로그
+    socket.onWebSocketClose = () => {
+      console.log("웹소켓 연결 종료");
+    };
+
+    console.log("웹소켓 activate");
+
     socket.activate();
 
     return () => {
-      socket.deactivate();
+      console.log("웹소켓 cleanup");
+
+      locationSub?.unsubscribe();
+      leaveSub?.unsubscribe();
+      wearingSub?.unsubscribe();
+      sosSub?.unsubscribe();
+
+      if (socket.active) {
+        socket.deactivate();
+      }
     };
   }, []);
 
   // 테스트 모드
   // "leave" | "wearing" | "sos"
-  const TEST_MODE = "leave";
+  /*const TEST_MODE = "leave";
 
   useEffect(() => {
     const sendTestData = async () => {
@@ -279,7 +320,7 @@ const Home = () => {
     const timer = setInterval(sendTestData, 10000);
 
     return () => clearInterval(timer);
-  }, []);
+  }, []);*/
 
   // 🔊 오디오 준비
   useEffect(() => {
