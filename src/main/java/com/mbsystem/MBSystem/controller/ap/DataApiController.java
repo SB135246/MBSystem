@@ -45,19 +45,7 @@ public class DataApiController {
         if (request.getWifi() != null) {
             log.info("스캔된 WiFi 개수: {}개", request.getWifi().size());
 
-            List<RssiScanRequest> rssiList = request.getWifi().stream()
-                    .filter(w -> w.getSsid() != null && w.getSsid().startsWith("AP"))
-                    .sorted(Comparator.comparingInt(SensorDataRequest.WifiInfo::getRssi).reversed())
-                    .limit(6)
-                    .map(w -> {
-                        RssiScanRequest dto = new RssiScanRequest();
-                        dto.setModuleNum((long) request.getModule_num());
-                        dto.setPlaceId((long) request.getPlace_id());
-                        dto.setSsid(w.getSsid());
-                        dto.setRssi((double) w.getRssi());
-                        return dto;
-                    })
-                    .collect(Collectors.toList());
+            List<RssiScanRequest> rssiList = extractTopApList(request,6);
 
             log.info("추출된 AP 개수: {}개", rssiList.size());
             rssiList.forEach(r -> log.info(" -> [{}] RSSI: {}", r.getSsid(), r.getRssi()));
@@ -78,21 +66,30 @@ public class DataApiController {
         wearingService.processWearingData(request);
 
         // RSSI 데이터 실시간 전송
-        if (request.getWifi() != null && !request.getWifi().isEmpty()) {
-            List<Map<String, Object>> rssiList = request.getWifi().stream()
-                    .filter(w -> w.getSsid() != null && !w.getSsid().isBlank())
-                    .sorted(Comparator.comparingInt(SensorDataRequest.WifiInfo::getRssi).reversed())
-                    .map(w -> Map.<String, Object>of("ssid", w.getSsid(), "rssi", w.getRssi()))
-                    .collect(Collectors.toList());
-
-            messagingTemplate.convertAndSend(
-                    "/topic/rssi/" + request.getPlace_id() + "/" + request.getModule_num(),
-                    rssiList
-            );
-        }
+        List<RssiScanRequest> top3ApList = extractTopApList(request,3);
+        messagingTemplate.convertAndSend(
+            "/topic/rssi/" + request.getPlace_id() + "/" + request.getModule_num(),
+            top3ApList
+        );
 
         log.info("===== 데이터 처리 완료 =====\n");
 
         return ResponseEntity.ok("Success: Data received and processed");
     }
+
+  private List<RssiScanRequest> extractTopApList(SensorDataRequest request, int limit) {
+    return request.getWifi().stream()
+        .filter(w -> w.getSsid() != null && w.getSsid().startsWith("AP"))
+        .sorted(Comparator.comparingInt(SensorDataRequest.WifiInfo::getRssi).reversed())
+        .limit(limit)
+        .map(w -> {
+          RssiScanRequest dto = new RssiScanRequest();
+          dto.setModuleNum((long) request.getModule_num());
+          dto.setPlaceId((long) request.getPlace_id());
+          dto.setSsid(w.getSsid());
+          dto.setRssi((double) w.getRssi());
+          return dto;
+        })
+        .collect(Collectors.toList());
+  }
 }
