@@ -184,28 +184,30 @@ const Home = () => {
 
             console.log("RSSI 수신:", data);
 
-            const converted = data.map((ap) => ({
-              id: ap.ssid ?? "Unknown",
-              value: `${ap.rssi ?? 0} dBm`,
+            const converted = [...data]
+              .sort((a, b) => a.ssid.localeCompare(b.ssid))
+              .map((ap) => ({
+                id: ap.ssid ?? "Unknown",
+                value: `${ap.rssi ?? 0} dBm`,
 
-              // 📶 신호 세기 바
-              bars:
-                ap.rssi >= -50
-                  ? 4
-                  : ap.rssi >= -60
-                    ? 3
-                    : ap.rssi >= -70
-                      ? 2
-                      : 1,
+                // 📶 신호 세기 바
+                bars:
+                  ap.rssi >= -50
+                    ? 4
+                    : ap.rssi >= -60
+                      ? 3
+                      : ap.rssi >= -70
+                        ? 2
+                        : 1,
 
-              // 🎨 색상
-              color:
-                ap.rssi >= -60
-                  ? "bg-[#00B341]"
-                  : ap.rssi >= -75
-                    ? "bg-[#FF9500]"
-                    : "bg-[#FF4D4D]",
-            }));
+                // 🎨 색상
+                color:
+                  ap.rssi >= -60
+                    ? "bg-[#00B341]"
+                    : ap.rssi >= -75
+                      ? "bg-[#FF9500]"
+                      : "bg-[#FF4D4D]",
+              }));
 
             setRssiData(converted);
           } catch (e) {
