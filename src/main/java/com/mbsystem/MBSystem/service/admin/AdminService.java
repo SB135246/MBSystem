@@ -3,6 +3,7 @@ package com.mbsystem.MBSystem.service.admin;
 import com.mbsystem.MBSystem.domain.Module;
 import com.mbsystem.MBSystem.dto.AdminAlertMessage;
 import com.mbsystem.MBSystem.dto.AlertHistoryResponse;
+import com.mbsystem.MBSystem.dto.SensorDataRequest;
 import com.mbsystem.MBSystem.repository.leave.LeaveRepository;
 import com.mbsystem.MBSystem.repository.module.ModuleRepository;
 import com.mbsystem.MBSystem.repository.sos.SosRepository;
@@ -44,12 +45,33 @@ public class AdminService {
 
     // ===================== 연결 종료 알림 =====================
 
-    public void disconnectModule(Long moduleNum, Long placeId) {
+    public void disconnectModule(SensorDataRequest request) {
+
+        String alertType =
+            request.getReset() == 1
+                ? "RESET"
+                : "DISCONNECT";
+
         AdminAlertMessage message = new AdminAlertMessage(
-                "DISCONNECT", null, moduleNum, placeId, Instant.now(), null, null
+            alertType,
+            null,
+            (long)request.getModule_num(),
+            (long)request.getPlace_id(),
+            Instant.now(),
+            null,
+            null
         );
+
         broadcastToAdmin(message);
-        log.info("[Admin] 모듈 {} 연결 종료 알림 - 장소: {}", moduleNum, placeId);
+
+        if (request.getReset() == 1) {
+
+            log.info(
+                "[Admin] 모듈 {} RESET 요청 - 장소: {}",
+                request.getModule_num(),
+                request.getPlace_id()
+            );
+        }
     }
 
     // ===================== 모듈별 로그 삭제 =====================

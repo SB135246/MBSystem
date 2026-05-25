@@ -32,12 +32,12 @@ public class AdminController {
 
     // ===================== 연결 종료 (ESP32 버튼 5초) =====================
 
-    @PostMapping("/disconnect/{moduleNum}/{placeId}")
+    /*@PostMapping("/disconnect/{moduleNum}/{placeId}")
     public ResponseEntity<Void> disconnectModule(@PathVariable Long moduleNum,
                                                   @PathVariable Long placeId) {
         adminService.disconnectModule(moduleNum, placeId);
         return ResponseEntity.ok().build();
-    }
+    }*/
 
     // ===================== 모듈별 로그 삭제 =====================
 

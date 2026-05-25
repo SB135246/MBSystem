@@ -2,6 +2,7 @@ package com.mbsystem.MBSystem.controller.ap;
 
 import com.mbsystem.MBSystem.dto.RssiScanRequest;
 import com.mbsystem.MBSystem.dto.SensorDataRequest;
+import com.mbsystem.MBSystem.service.admin.AdminService;
 import com.mbsystem.MBSystem.service.ap.LocationService;
 import com.mbsystem.MBSystem.service.leave.LeaveService;
 import com.mbsystem.MBSystem.service.sos.SosService;
@@ -28,6 +29,7 @@ public class DataApiController {
     private final SosService sosService;
     private final LeaveService leaveService;
     private final WearingService wearingService;
+    private final AdminService adminService;
     private final SimpMessagingTemplate messagingTemplate;
 
     @PostMapping("/data")
@@ -64,6 +66,9 @@ public class DataApiController {
         }
         leaveService.checkDeparture(request);
         wearingService.processWearingData(request);
+        if (request.getReset() == 1) {
+            adminService.disconnectModule(request);
+        }
 
         // RSSI 데이터 실시간 전송
         List<RssiScanRequest> top3ApList = extractTopApList(request,3);
