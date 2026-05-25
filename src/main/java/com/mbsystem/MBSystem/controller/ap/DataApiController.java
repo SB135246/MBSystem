@@ -10,10 +10,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -26,6 +28,7 @@ public class DataApiController {
     private final SosService sosService;
     private final LeaveService leaveService;
     private final WearingService wearingService;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @PostMapping("/data")
     public ResponseEntity<String> receiveSensorData(@RequestBody SensorDataRequest request,
@@ -73,6 +76,20 @@ public class DataApiController {
         }
         leaveService.checkDeparture(request);
         wearingService.processWearingData(request);
+
+        // RSSI 데이터 실시간 전송
+        if (request.getWifi() != null && !request.getWifi().isEmpty()) {
+            List<Map<String, Object>> rssiList = request.getWifi().stream()
+                    .filter(w -> w.getSsid() != null && !w.getSsid().isBlank())
+                    .sorted(Comparator.comparingInt(SensorDataRequest.WifiInfo::getRssi).reversed())
+                    .map(w -> Map.<String, Object>of("ssid", w.getSsid(), "rssi", w.getRssi()))
+                    .collect(Collectors.toList());
+
+            messagingTemplate.convertAndSend(
+                    "/topic/rssi/" + request.getPlace_id() + "/" + request.getModule_num(),
+                    rssiList
+            );
+        }
 
         log.info("===== 데이터 처리 완료 =====\n");
 
