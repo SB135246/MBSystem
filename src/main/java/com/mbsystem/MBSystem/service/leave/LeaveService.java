@@ -39,7 +39,7 @@ public class LeaveService {
     // 모듈별 알림 전송 여부 (이탈 중일 때 중복 알림 방지)
     private final Map<Long, Boolean> isAlertSentMap = new ConcurrentHashMap<>();
 
-    private static final long LEAVE_DELAY_MINUTES = 3;
+    private static final long LEAVE_DELAY_SECONDS = 30;
 
     @Transactional
     public void checkDeparture(SensorDataRequest request) {
@@ -77,14 +77,14 @@ public class LeaveService {
             Instant firstDetected = departureStartTimes.putIfAbsent(moduleId, Instant.now());
             
             if (firstDetected == null) {
-                log.info("[이탈감지] 모듈 {} 이탈 처음 감지 - 3분 대기 시작", moduleNum);
+                log.info("[이탈감지] 모듈 {} 이탈 처음 감지 - 30초 대기 시작", moduleNum);
             } else {
-                long minutesPassed = java.time.Duration.between(firstDetected, Instant.now()).toMinutes();
+                long secondsPassed = java.time.Duration.between(firstDetected, Instant.now()).toSeconds();
                 
-                if (minutesPassed >= LEAVE_DELAY_MINUTES) {
-                    // --- 3분 경과: 확정적 이탈 ---
+                if (secondsPassed >= LEAVE_DELAY_SECONDS) {
+                    // --- 30초 경과: 확정적 이탈 ---
                     if (!isAlertSentMap.getOrDefault(moduleId, false)) {
-                        log.warn("[이탈감지] 모듈 {} 3분 이상 이탈 확정 - 알림 및 DB 저장", moduleNum);
+                        log.warn("[이탈감지] 모듈 {} 30초 이상 이탈 확정 - 알림 및 DB 저장", moduleNum);
                         
                         Leave leave = new Leave();
                         leave.setModule(module);
@@ -92,7 +92,7 @@ public class LeaveService {
                         Leave saved = leaveRepository.save(leave);
                         isAlertSentMap.put(moduleId, true);
 
-                        // 공식 알림 메시지 발송 (3분에 한 번, 이탈 확정 시에만)
+                        // 공식 알림 메시지 발송 (30초에 한 번, 이탈 확정 시에만)
                         LeaveAlertMessage alert = new LeaveAlertMessage(
                                 saved.getId(),
                                 module.getModuleNum(),
@@ -113,7 +113,7 @@ public class LeaveService {
                         ));
                     }
                 } else {
-                    log.info("[이탈감지] 모듈 {} 이탈 유지 중... (현재 {}분 경과)", moduleNum, minutesPassed);
+                    log.info("[이탈감지] 모듈 {} 이탈 유지 중... (현재 {}초 경과)", moduleNum, secondsPassed);
                 }
             }
         }
