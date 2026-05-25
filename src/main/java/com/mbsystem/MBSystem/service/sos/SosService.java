@@ -82,13 +82,14 @@ public class SosService {
 
     @Transactional
     public void confirmSos(Long sosId) {
-        Sos sos = sosRepository.findBySosId(sosId)
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 SOS: " + sosId));
-        sos.setIsConfirmed(true);
-        sos.setConfirmedAt(Instant.now());
-        sosRepository.save(sos);
+        sosRepository.findBySosId(sosId).ifPresent(sos -> {
+            sos.setIsConfirmed(true);
+            sos.setConfirmedAt(Instant.now());
+            sosRepository.save(sos);
+        });
 
-        cancelRepeat(sosId);
+        cancelRepeat(sosId); // 레코드 없어도 반드시 스케줄러 취소
+        log.info("[SOS] confirm 처리 완료 - sosId: {}", sosId);
     }
 
     private double[] calculatePosition(SensorDataRequest request) {
