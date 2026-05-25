@@ -20,6 +20,9 @@ export const AlertProvider = ({ children }) => {
     isInitial: true,
   });
 
+  // 📶 RSSI 데이터
+  const [rssiData, setRssiData] = useState([]);
+
   // 🔔 알림 추가
   const addAlert = (alert) => {
     setAlerts((prev) => [
@@ -50,6 +53,10 @@ export const AlertProvider = ({ children }) => {
         // 🏢 floor
         currentFloor,
         setCurrentFloor,
+
+        // 📶 RSSI
+        rssiData,
+        setRssiData,
       }}
     >
       {children}

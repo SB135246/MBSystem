@@ -32,7 +32,6 @@ const Home = () => {
     const percentY = 78 - (adjustedY / 10) * 36;
     return { x: percentX, y: percentY };
   };
-
   const {
     alerts,
     addAlert,
@@ -42,6 +41,10 @@ const Home = () => {
     setCurrentFloor,
     markerPosition,
     setMarkerPosition,
+
+    // 📶 RSSI
+    rssiData,
+    setRssiData,
   } = useAlert();
 
   const audioRef = useRef(null);
@@ -56,6 +59,7 @@ const Home = () => {
     let leaveSub;
     let wearingSub;
     let sosSub;
+    let rssiSub;
 
     // 이미 연결되어 있으면 중복 연결 방지
     if (socket.active) {
@@ -84,7 +88,7 @@ const Home = () => {
             if (data.x !== undefined && data.y !== undefined) {
               const pos = convertToPercent(data.x, data.y);
 
-              console.log("보정 퍼센트 좌표:", pos);
+              //console.log("보정 퍼센트 좌표:", pos);
 
               setMarkerPosition({
                 ...pos,
@@ -170,6 +174,45 @@ const Home = () => {
           setLastUpdated(new Date());
         },
       );
+
+      // 📶 RSSI 실시간 수신
+      rssiSub = socket.subscribe(
+        `/topic/rssi/${placeId}/${moduleNum}`,
+        (message) => {
+          try {
+            const data = JSON.parse(message.body);
+
+            console.log("RSSI 수신:", data);
+
+            const converted = data.map((ap) => ({
+              id: ap.ssid ?? "Unknown",
+              value: `${ap.rssi ?? 0} dBm`,
+
+              // 📶 신호 세기 바
+              bars:
+                ap.rssi >= -50
+                  ? 4
+                  : ap.rssi >= -60
+                    ? 3
+                    : ap.rssi >= -70
+                      ? 2
+                      : 1,
+
+              // 🎨 색상
+              color:
+                ap.rssi >= -60
+                  ? "bg-[#00B341]"
+                  : ap.rssi >= -75
+                    ? "bg-[#FF9500]"
+                    : "bg-[#FF4D4D]",
+            }));
+
+            setRssiData(converted);
+          } catch (e) {
+            console.error("RSSI 파싱 오류:", e);
+          }
+        },
+      );
     };
 
     // STOMP 에러
@@ -198,6 +241,7 @@ const Home = () => {
       leaveSub?.unsubscribe();
       wearingSub?.unsubscribe();
       sosSub?.unsubscribe();
+      rssiSub?.unsubscribe();
 
       if (socket.active) {
         socket.deactivate();
@@ -207,7 +251,7 @@ const Home = () => {
 
   // 테스트 모드
   // "leave" | "wearing" | "sos"
-  /*const TEST_MODE = "leave";
+  /*const TEST_MODE = "wearing";
 
   useEffect(() => {
     const sendTestData = async () => {
@@ -262,7 +306,7 @@ const Home = () => {
               },
               {
                 ssid: "AP3",
-                rssi: -50,
+                rssi: -60,
               },
             ],
           };
@@ -285,11 +329,11 @@ const Home = () => {
               },
               {
                 ssid: "AP2",
-                rssi: -45,
+                rssi: -50,
               },
               {
                 ssid: "AP3",
-                rssi: -50,
+                rssi: -60,
               },
             ],
           };
@@ -499,46 +543,54 @@ const Home = () => {
             </div>
           </section>
 
-          {/* RSSI */}
+          {/* 📶 RSSI */}
           <section className="bg-white rounded-xl p-4 border border-[#E9ECEF] shadow-sm">
             <div className="flex items-center text-[#0062FF] font-bold mb-3">
               <Wifi size={18} className="mr-2" />
+
               <span className="text-[clamp(0.9rem,3vw,1.1rem)]">RSSI 신호</span>
             </div>
 
             <div className="space-y-3">
-              {[
-                { id: "AP1", value: "-55 dBm", bars: 4, color: "bg-[#00B341]" },
-                { id: "AP2", value: "-70 dBm", bars: 3, color: "bg-[#FF9500]" },
-                { id: "AP3", value: "-65 dBm", bars: 4, color: "bg-[#00B341]" },
-              ].map((ap, index) => (
-                <div
-                  key={ap.id}
-                  className={`flex items-center justify-between ${
-                    index !== 0 ? "pt-3 border-t border-[#F1F3F5]" : ""
-                  }`}
-                >
-                  <span className="text-[clamp(0.75rem,3vw,0.9rem)] font-semibold text-[#495057]">
-                    {ap.id}
-                  </span>
-
-                  <div className="flex items-end gap-[2px] h-5">
-                    {[1, 2, 3, 4].map((bar) => (
-                      <div
-                        key={bar}
-                        className={`w-[3px] rounded-sm ${
-                          bar <= ap.bars ? ap.color : "bg-[#E9ECEF]"
-                        }`}
-                        style={{ height: `${bar * 25}%` }}
-                      />
-                    ))}
-                  </div>
-
-                  <span className="text-[clamp(0.75rem,3vw,0.9rem)] w-20 text-right text-[#495057]">
-                    {ap.value}
-                  </span>
+              {rssiData.length === 0 ? (
+                <div className="text-center text-[#868E96] text-sm py-4">
+                  RSSI 데이터 수신 대기중...
                 </div>
-              ))}
+              ) : (
+                rssiData.map((ap, index) => (
+                  <div
+                    key={ap.id}
+                    className={`flex items-center justify-between ${
+                      index !== 0 ? "pt-3 border-t border-[#F1F3F5]" : ""
+                    }`}
+                  >
+                    {/* AP 이름 */}
+                    <span className="text-[clamp(0.75rem,3vw,0.9rem)] font-semibold text-[#495057]">
+                      {ap.id}
+                    </span>
+
+                    {/* 신호 바 */}
+                    <div className="flex items-end gap-[2px] h-5">
+                      {[1, 2, 3, 4].map((bar) => (
+                        <div
+                          key={bar}
+                          className={`w-[3px] rounded-sm ${
+                            bar <= ap.bars ? ap.color : "bg-[#E9ECEF]"
+                          }`}
+                          style={{
+                            height: `${bar * 25}%`,
+                          }}
+                        />
+                      ))}
+                    </div>
+
+                    {/* RSSI 값 */}
+                    <span className="text-[clamp(0.75rem,3vw,0.9rem)] w-20 text-right text-[#495057]">
+                      {ap.value}
+                    </span>
+                  </div>
+                ))
+              )}
             </div>
           </section>
         </main>
@@ -566,11 +618,17 @@ const Home = () => {
               }`}
             >
               {alertType === "leave" ? (
-                <MapPin size={28} className="text-orange-500" />
+                <MapPin
+                  size={28}
+                  className="text-orange-500 animate-location"
+                />
               ) : alertType === "wearing" ? (
-                <ShieldAlert size={28} className="text-purple-500" />
+                <ShieldAlert
+                  size={28}
+                  className="text-purple-500 animate-wearing"
+                />
               ) : (
-                <Bell size={28} className="text-red-500" />
+                <Bell size={28} className="text-red-500 animate-bell" />
               )}
             </div>
             <p
