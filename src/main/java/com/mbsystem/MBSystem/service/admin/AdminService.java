@@ -44,7 +44,6 @@ public class AdminService {
     }
 
     // ===================== 연결 종료 알림 =====================
-
     public void disconnectModule(SensorDataRequest request) {
 
         String alertType =
