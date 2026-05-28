@@ -36,8 +36,8 @@ public class LeaveService {
 
     // 모듈별 처음 이탈이 감지된 시각
     private final Map<Long, Instant> departureStartTimes = new ConcurrentHashMap<>();
-    // 모듈별 알림 전송 여부 (이탈 중일 때 중복 알림 방지)
-    private final Map<Long, Boolean> isAlertSentMap = new ConcurrentHashMap<>();
+    // 알림 전송 여부 관리
+    private final Map<Long, Boolean> alertSentMap = new ConcurrentHashMap<>();
 
     private static final long LEAVE_DELAY_SECONDS = 30;
 
@@ -49,73 +49,67 @@ public class LeaveService {
 
         Long moduleId = module.getId();
         Long placeId = (long) request.getPlace_id();
-        Long moduleNum = (long) request.getModule_num();
 
-        // 해당 장소에 등록된 AP SSID 목록 조회
+        // 수신된 WiFi 중 장소 AP와 일치하는 것이 있는지 확인
+        boolean isNowInPlace = isModuleInPlace(request, placeId);
+
+        if (isNowInPlace) {
+            // 정상 구역 내: 모든 상태 초기화
+            departureStartTimes.remove(moduleId);
+            alertSentMap.remove(moduleId);
+            return;
+        }
+
+        // --- 이탈 감지 시 로직 ---
+        Instant firstDetected = departureStartTimes.putIfAbsent(moduleId, Instant.now());
+        if (firstDetected == null) return; // 처음 감지됨 (기록만 하고 종료)
+
+        long secondsPassed = java.time.Duration.between(firstDetected, Instant.now()).toSeconds();
+
+        // 30초 경과 및 아직 알림 미발송 시 확정 처리
+        if (secondsPassed >= LEAVE_DELAY_SECONDS && !alertSentMap.getOrDefault(moduleId, false)) {
+            processFinalDeparture(module, placeId);
+            alertSentMap.put(moduleId, true);
+        }
+    }
+
+    private boolean isModuleInPlace(SensorDataRequest request, Long placeId) {
+        if (request.getWifi() == null || request.getWifi().isEmpty()) return false;
+
         List<Ap> placeAps = apRepository.findByPlaceId(placeId);
         Set<String> placeApSsids = placeAps.stream()
                 .map(Ap::getSsid)
                 .collect(Collectors.toSet());
 
-        // 수신된 WiFi 중 장소 AP와 일치하는 SSID의 개수 확인
-        long matchingApCount = request.getWifi() == null ? 0 : request.getWifi().stream()
-                .filter(w -> w.getSsid() != null && placeApSsids.contains(w.getSsid()))
-                .count();
+        return request.getWifi().stream()
+                .anyMatch(w -> w.getSsid() != null && placeApSsids.contains(w.getSsid()));
+    }
 
-        // 1차 판단: 현재 지정된 AP가 1개라도 잡히는가? (0개일 때만 이탈로 간주)
-        boolean isNowInPlace = matchingApCount >= 1;
+    private void processFinalDeparture(Module module, Long placeId) {
+        log.warn("[Leave] 이탈 확정: DB 기록 및 알림 전송 (모듈 {})", module.getModuleNum());
 
-        if (isNowInPlace) {
-            // --- 구역 내 정상 위치 ---
-            if (departureStartTimes.containsKey(moduleId)) {
-                log.info("[이탈감지] 모듈 {} 구역 복귀 확인 - 상태 초기화 (지정 AP {}개 감지)", moduleNum, matchingApCount);
-            }
-            departureStartTimes.remove(moduleId);
-            isAlertSentMap.remove(moduleId);
-        } else {
-            // --- 이탈 가능성 감지 (지정 AP 0개) ---
-            Instant firstDetected = departureStartTimes.putIfAbsent(moduleId, Instant.now());
-            
-            if (firstDetected == null) {
-                log.info("[이탈감지] 모듈 {} 이탈 처음 감지 - 30초 대기 시작", moduleNum);
-            } else {
-                long secondsPassed = java.time.Duration.between(firstDetected, Instant.now()).toSeconds();
-                
-                if (secondsPassed >= LEAVE_DELAY_SECONDS) {
-                    // --- 30초 경과: 확정적 이탈 ---
-                    if (!isAlertSentMap.getOrDefault(moduleId, false)) {
-                        log.warn("[이탈감지] 모듈 {} 30초 이상 이탈 확정 - 알림 및 DB 저장", moduleNum);
-                        
-                        Leave leave = new Leave();
-                        leave.setModule(module);
-                        leave.setLeavedAt(Instant.now());
-                        Leave saved = leaveRepository.save(leave);
-                        isAlertSentMap.put(moduleId, true);
+        Leave leave = new Leave();
+        leave.setModule(module);
+        leave.setLeavedAt(Instant.now());
+        Leave saved = leaveRepository.save(leave);
 
-                        // 공식 알림 메시지 발송 (30초에 한 번, 이탈 확정 시에만)
-                        LeaveAlertMessage alert = new LeaveAlertMessage(
-                                saved.getId(),
-                                module.getModuleNum(),
-                                module.getPlace().getId(),
-                                saved.getLeavedAt(),
-                                false // inPlace = false (이탈함)
-                        );
-                        messagingTemplate.convertAndSend("/topic/leave/" + placeId + "/" + moduleNum, alert);
+        LeaveAlertMessage alert = new LeaveAlertMessage(
+                saved.getId(),
+                module.getModuleNum(),
+                placeId,
+                saved.getLeavedAt(),
+                false
+        );
+        messagingTemplate.convertAndSend("/topic/leave/" + placeId + "/" + module.getModuleNum(), alert);
 
-                        adminService.broadcastToAdmin(new AdminAlertMessage(
-                                "LEAVE",
-                                saved.getId(),
-                                module.getModuleNum(),
-                                module.getPlace().getId(),
-                                saved.getLeavedAt(),
-                                null,
-                                null
-                        ));
-                    }
-                } else {
-                    log.info("[이탈감지] 모듈 {} 이탈 유지 중... (현재 {}초 경과)", moduleNum, secondsPassed);
-                }
-            }
-        }
+        adminService.broadcastToAdmin(new AdminAlertMessage(
+                "LEAVE",
+                saved.getId(),
+                module.getModuleNum(),
+                placeId,
+                saved.getLeavedAt(),
+                null,
+                null
+        ));
     }
 }
