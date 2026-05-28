@@ -118,10 +118,9 @@ public class LocationService {
 
   private double rssiToRadius(double rssi) {
 
-
-    if (rssi >= -45) return 1.0;
-    if (rssi >= -55) return 2.0;
-    if (rssi >= -65) return 3.0;
+    if (rssi >= -40) return 1.0;
+    if (rssi >= -60) return 2.0;
+    if (rssi >= -70) return 3.0;
 
     return 4.0;
   }
