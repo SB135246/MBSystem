@@ -15,10 +15,13 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+
         http
-                .cors(cors -> cors.configurationSource(corsConfigurationSource())) // CORS 설정 적용
+                // CORS 설정 추가 (2026/06/04 서상범)
+                .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
+                        // WebSocket 엔드포인트 허용 추가 (2026/06/04 서상범)
                         .requestMatchers("/api/**", "/swagger-ui/**", "/v3/api-docs/**", "/ws-location/**").permitAll()
                         .anyRequest().permitAll()
                 );
@@ -26,18 +29,19 @@ public class SecurityConfig {
         return http.build();
     }
 
+    // CORS 설정 메서드 추가 (2026/06/04 서상범)
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
-        
-        // 모든 오리진 허용 (프론트엔드 개발 환경 고려)
-        configuration.addAllowedOriginPattern("*"); 
+
+        configuration.addAllowedOriginPattern("*");
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(Arrays.asList("*"));
         configuration.setAllowCredentials(true);
 
         UrlBasedCorsConfigurationSource source = new UrlBasedCorsConfigurationSource();
         source.registerCorsConfiguration("/**", configuration);
+
         return source;
     }
 }

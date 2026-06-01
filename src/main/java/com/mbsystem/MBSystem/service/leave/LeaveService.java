@@ -1,3 +1,4 @@
+//LeaveService 추가 (2026/06/04 서상범)
 package com.mbsystem.MBSystem.service.leave;
 
 import com.mbsystem.MBSystem.domain.Ap;
