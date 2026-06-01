@@ -1,13 +1,11 @@
 //LeaveService 추가 (2026/06/04 서상범)
 package com.mbsystem.MBSystem.service.leave;
 
-import com.mbsystem.MBSystem.domain.Ap;
 import com.mbsystem.MBSystem.domain.Leave;
 import com.mbsystem.MBSystem.domain.Module;
 import com.mbsystem.MBSystem.dto.AdminAlertMessage;
 import com.mbsystem.MBSystem.dto.LeaveAlertMessage;
 import com.mbsystem.MBSystem.dto.SensorDataRequest;
-import com.mbsystem.MBSystem.repository.ap.ApRepository;
 import com.mbsystem.MBSystem.repository.leave.LeaveRepository;
 import com.mbsystem.MBSystem.repository.module.ModuleRepository;
 import com.mbsystem.MBSystem.service.admin.AdminService;
@@ -18,11 +16,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -31,59 +26,35 @@ public class LeaveService {
 
     private final LeaveRepository leaveRepository;
     private final ModuleRepository moduleRepository;
-    private final ApRepository apRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final AdminService adminService;
 
-    // 모듈별 처음 이탈이 감지된 시각
-    private final Map<Long, Instant> departureStartTimes = new ConcurrentHashMap<>();
     // 알림 전송 여부 관리
     private final Map<Long, Boolean> alertSentMap = new ConcurrentHashMap<>();
 
-    private static final long LEAVE_DELAY_SECONDS = 30;
-
     @Transactional
     public void checkDeparture(SensorDataRequest request) {
-        Module module = moduleRepository.findByModuleNumAndPlaceId(
-                        (long) request.getModule_num(), (long) request.getPlace_id())
-                .orElseThrow(() -> new IllegalArgumentException("등록되지 않은 모듈: " + request.getModule_num()));
-
-        Long moduleId = module.getId();
+        Long moduleId = (long) request.getModule_num();
         Long placeId = (long) request.getPlace_id();
 
-        // 수신된 WiFi 중 장소 AP와 일치하는 것이 있는지 확인
-        boolean isNowInPlace = isModuleInPlace(request, placeId);
+        // ESP32로부터 수신된 이탈 확정 상태 확인 (1: 이탈, 0: 정상)
+        boolean isLeave = (request.getLeave() == 1);
 
-        if (isNowInPlace) {
-            // 정상 구역 내: 모든 상태 초기화
-            departureStartTimes.remove(moduleId);
-            alertSentMap.remove(moduleId);
+        if (!isLeave) {
+            // 정상 구역 내로 돌아왔다면 알림 발송 가능 상태로 초기화
+            alertSentMap.put(moduleId, false);
             return;
         }
 
         // --- 이탈 감지 시 로직 ---
-        Instant firstDetected = departureStartTimes.putIfAbsent(moduleId, Instant.now());
-        if (firstDetected == null) return; // 처음 감지됨 (기록만 하고 종료)
-
-        long secondsPassed = java.time.Duration.between(firstDetected, Instant.now()).toSeconds();
-
-        // 30초 경과 및 아직 알림 미발송 시 확정 처리
-        if (secondsPassed >= LEAVE_DELAY_SECONDS && !alertSentMap.getOrDefault(moduleId, false)) {
+        // 이탈 상태(1)이고 아직 이번 이탈에 대해 알림을 안 보냈다면 처리
+        if (!alertSentMap.getOrDefault(moduleId, false)) {
+            Module module = moduleRepository.findByModuleNumAndPlaceId(moduleId, placeId)
+                    .orElseThrow(() -> new IllegalArgumentException("등록되지 않은 모듈: " + moduleId));
+            
             processFinalDeparture(module, placeId);
-            alertSentMap.put(moduleId, true);
+            alertSentMap.put(moduleId, true); // 알림 발송 완료 처리 (복귀 전까지 재발송 안함)
         }
-    }
-
-    private boolean isModuleInPlace(SensorDataRequest request, Long placeId) {
-        if (request.getWifi() == null || request.getWifi().isEmpty()) return false;
-
-        List<Ap> placeAps = apRepository.findByPlaceId(placeId);
-        Set<String> placeApSsids = placeAps.stream()
-                .map(Ap::getSsid)
-                .collect(Collectors.toSet());
-
-        return request.getWifi().stream()
-                .anyMatch(w -> w.getSsid() != null && placeApSsids.contains(w.getSsid()));
     }
 
     private void processFinalDeparture(Module module, Long placeId) {
