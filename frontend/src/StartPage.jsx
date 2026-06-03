@@ -8,8 +8,7 @@ const StartPage = () => {
 
   const [adminClickCount, setAdminClickCount] = useState(0);
   const [lastClickTime, setLastClickTime] = useState(0);
-  const { placehd, modulenum } = useParams();
-
+  const { placeId, moduleNum } = useParams();
   const handleAdminAccess = () => {
     const now = Date.now();
 
@@ -38,11 +37,11 @@ const StartPage = () => {
 
       // 🔥 약간의 딜레이 후 이동
       setTimeout(() => {
-        navigate(`/main/${placehd}/${modulenum}`);
+        navigate(`/main/${placeId}/${moduleNum}`);
       }, 100);
     } catch (e) {
       console.log("unlock 실패", e);
-      navigate(`/main/${placehd}/${modulenum}`);
+      navigate(`/main/${placeId}/${moduleNum}`);
     }
   };
 
