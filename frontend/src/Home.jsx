@@ -1,3 +1,4 @@
+//2026-05-25 이성진
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Bell, Clock, Wifi, MapPin, ShieldAlert } from "lucide-react";
@@ -88,7 +89,7 @@ const Home = () => {
             if (data.x !== undefined && data.y !== undefined) {
               const pos = convertToPercent(data.x, data.y);
 
-              //console.log("보정 퍼센트 좌표:", pos);
+              console.log("보정 퍼센트 좌표:", pos);
 
               setMarkerPosition({
                 ...pos,
@@ -185,7 +186,7 @@ const Home = () => {
             console.log("RSSI 수신:", data);
 
             const converted = [...data]
-              .sort((a, b) => a.ssid.localeCompare(b.ssid))
+              .sort((a, b) => (b.rssi ?? -Infinity) - (a.rssi ?? -Infinity))
               .map((ap) => ({
                 id: ap.ssid ?? "Unknown",
                 value: `${ap.rssi ?? 0} dBm`,
@@ -253,7 +254,7 @@ const Home = () => {
 
   // 테스트 모드
   // "leave" | "wearing" | "sos"
-  /*const TEST_MODE = "wearing";
+  const TEST_MODE = "leave";
 
   useEffect(() => {
     const sendTestData = async () => {
@@ -272,16 +273,8 @@ const Home = () => {
 
             wifi: [
               {
-                ssid: "AP1",
+                ssid: "HOME-WIFI",
                 rssi: -95,
-              },
-              {
-                ssid: "AP2",
-                rssi: -90,
-              },
-              {
-                ssid: "AP3",
-                rssi: -92,
               },
             ],
           };
@@ -362,11 +355,11 @@ const Home = () => {
     // 처음 1회
     sendTestData();
 
-    // 30초마다 반복
-    const timer = setInterval(sendTestData, 10000);
+    // 10초마다 반복
+    const timer = setInterval(sendTestData, 3000);
 
     return () => clearInterval(timer);
-  }, []);*/
+  }, []);
 
   // 🔊 오디오 준비
   useEffect(() => {
