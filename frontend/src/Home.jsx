@@ -1,4 +1,4 @@
-//2026-05-25 이성진
+//2026-05-14 이성진
 import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Bell, Clock, Wifi, MapPin, ShieldAlert } from "lucide-react";
@@ -89,7 +89,7 @@ const Home = () => {
             if (data.x !== undefined && data.y !== undefined) {
               const pos = convertToPercent(data.x, data.y);
 
-              console.log("보정 퍼센트 좌표:", pos);
+              //console.log("보정 퍼센트 좌표:", pos);
 
               setMarkerPosition({
                 ...pos,
@@ -186,7 +186,7 @@ const Home = () => {
             console.log("RSSI 수신:", data);
 
             const converted = [...data]
-              .sort((a, b) => (b.rssi ?? -Infinity) - (a.rssi ?? -Infinity))
+              .sort((a, b) => (b.rssi ?? -100) - (a.rssi ?? -100))
               .map((ap) => ({
                 id: ap.ssid ?? "Unknown",
                 value: `${ap.rssi ?? 0} dBm`,
@@ -250,115 +250,6 @@ const Home = () => {
         socket.deactivate();
       }
     };
-  }, []);
-
-  // 테스트 모드
-  // "leave" | "wearing" | "sos"
-  const TEST_MODE = "leave";
-
-  useEffect(() => {
-    const sendTestData = async () => {
-      try {
-        let testData = {};
-
-        // 📍 위치 이탈 테스트
-        if (TEST_MODE === "leave") {
-          testData = {
-            module_num: 2,
-            place_id: 1,
-            btn: 0,
-            btn_press_3s: 0,
-            light: 0,
-            touch: 0,
-
-            wifi: [
-              {
-                ssid: "HOME-WIFI",
-                rssi: -95,
-              },
-            ],
-          };
-        }
-
-        // 🛡️ 착용 해제 테스트
-        if (TEST_MODE === "wearing") {
-          testData = {
-            module_num: 2,
-            place_id: 1,
-            btn: 0,
-            btn_press_3s: 0,
-            light: 300,
-            touch: 0,
-
-            wifi: [
-              {
-                ssid: "AP1",
-                rssi: -40,
-              },
-              {
-                ssid: "AP2",
-                rssi: -45,
-              },
-              {
-                ssid: "AP3",
-                rssi: -60,
-              },
-            ],
-          };
-        }
-
-        // 🚨 SOS 테스트
-        if (TEST_MODE === "sos") {
-          testData = {
-            module_num: 2,
-            place_id: 1,
-            btn: 0,
-            btn_press_3s: 1,
-            light: 0,
-            touch: 0,
-
-            wifi: [
-              {
-                ssid: "AP1",
-                rssi: -40,
-              },
-              {
-                ssid: "AP2",
-                rssi: -50,
-              },
-              {
-                ssid: "AP3",
-                rssi: -60,
-              },
-            ],
-          };
-        }
-
-        const response = await fetch(`${API_URL}/data`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify(testData),
-        });
-
-        console.log("테스트 데이터 전송");
-        console.log("status =", response.status);
-
-        const text = await response.text();
-        console.log("response =", text);
-      } catch (error) {
-        console.error(error);
-      }
-    };
-
-    // 처음 1회
-    sendTestData();
-
-    // 10초마다 반복
-    const timer = setInterval(sendTestData, 3000);
-
-    return () => clearInterval(timer);
   }, []);
 
   // 🔊 오디오 준비
@@ -514,8 +405,8 @@ const Home = () => {
                     }`}
                     style={{
                       // 반지름 1단위당 크기를 기존 2.533에서 3.0으로 약간 키움
-                      width: `${markerPosition.radius * 3.0}cqw`,
-                      height: `${markerPosition.radius * 3.0}cqw`,
+                      width: `${markerPosition.radius * 4.5}cqw`,
+                      height: `${markerPosition.radius * 4.5}cqw`,
                       left: "50%",
                       top: "50%",
                       transform: "translate(-50%, -50%)",
@@ -528,7 +419,7 @@ const Home = () => {
                   className="text-[#0062FF] fill-[#0062FF] relative z-20"
                 />
 
-                {/* 📍 정확한 중심점 (파란색 채워진 점) */}
+                {/* 📍 정확한 중심점 (파란색 채워진 ///////점) */}
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-2 h-2 bg-[#0062FF] rounded-full border border-white z-30 shadow-sm" />
 
                 <div className="bg-[#0062FF] text-white text-[clamp(0.4rem,1.5vw,0.6rem)] px-1 py-[1px] rounded mt-1 whitespace-nowrap shadow-sm relative z-20">
