@@ -1,6 +1,6 @@
 //2026-05-14 이성진
 import { Bell, Play } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useState } from "react";
 
 const StartPage = () => {
@@ -8,6 +8,7 @@ const StartPage = () => {
 
   const [adminClickCount, setAdminClickCount] = useState(0);
   const [lastClickTime, setLastClickTime] = useState(0);
+  const { placehd, modulenum } = useParams();
 
   const handleAdminAccess = () => {
     const now = Date.now();
@@ -37,11 +38,11 @@ const StartPage = () => {
 
       // 🔥 약간의 딜레이 후 이동
       setTimeout(() => {
-        navigate("/main/1/2");
+        navigate(`/main/${placehd}/${modulenum}`);
       }, 100);
     } catch (e) {
       console.log("unlock 실패", e);
-      navigate("/main/1/2");
+      navigate(`/main/${placehd}/${modulenum}`);
     }
   };
 
