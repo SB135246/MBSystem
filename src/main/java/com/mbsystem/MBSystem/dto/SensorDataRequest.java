@@ -13,6 +13,7 @@ public class SensorDataRequest {
   private float light;         // 조도 값
   private int touch;           // 아날로그 터치 값
   private int reset;           // reset 상태
+  private int leave;           // leave 상태
   private List<WifiInfo> wifi; // WiFi 목록
 
   @Getter @Setter @ToString
